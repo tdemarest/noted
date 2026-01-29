@@ -77,24 +77,26 @@ uv run noted view <id_or_uuid> --markdown -o ./my_note.md
 
 # Export single note with attachments
 uv run noted export <id_or_uuid>
-# Creates: ./Note_Title.md and ./Note_Title_attachments/
+# Creates: ./Note Title.md and ./Note Title_attachments/
 
 # Export single note as 7zip archive
 uv run noted export <id_or_uuid> --zip
-# Creates: ./Note_Title.7z
+# Creates: ./Note Title.7z
 
 # Export ALL notes with attachments
 uv run noted export --all
-# Creates: ./notes_export/ with folder structure mirroring Apple Notes
+# Creates: ./notes_export/ with nested folder structure mirroring Apple Notes
+# Example: notes_export/Hobbies/Photography/Landscape Photos/Service Records.md
 
 # Export all notes with 7zip archive
 uv run noted export --all --zip
 # Creates: ./notes_export/ AND ./notes_export.7z
+# Shows progress: "Exporting notes... 150/150 notes" then "Creating archive... 412/412 files"
 
 # Export to custom directory
 uv run noted export --all -o ~/Backups/notes_2026-01-29
 
-# Export only notes from specific folder
+# Export only notes from specific folder (matches anywhere in path)
 uv run noted export --all --folder "Work"
 
 # Export excluding deleted notes
@@ -108,6 +110,17 @@ uv run noted refresh
 ```
 
 The CLI automatically caches a copy of the Apple Notes database to `~/.cache/noted/` and refreshes it when the source database changes.
+
+### Locked Notes
+
+**Important:** Apple Notes that are password-protected (locked) cannot be read by this tool. When exporting:
+
+- Locked notes are detected and skipped (content is encrypted)
+- A placeholder markdown file is created with a message explaining the note is locked
+- The `index.json` manifest marks these notes with `"locked": true` and `"export_status": "locked"`
+- Summary shows count of locked notes: "3 locked notes (placeholders created)"
+
+To export locked notes: unlock them in Apple Notes first, then run the export again.
 
 ## ENVIRONMENT VARIABLES
 
