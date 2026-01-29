@@ -124,7 +124,7 @@ Or equivalently, for 5 columns with 15 cells each:
 
 ## Storage Order vs Display Order
 
-**Important**: The storage order of columns may not match the display order.
+**Important**: The storage order of columns in ZMERGEABLEDATA1 may not match the display order.
 
 Example from note 12345:
 
@@ -136,7 +136,45 @@ Example from note 12345:
 | 3 | Service Desc | 3 | Performed By |
 | 4 | Miles | 4 | Service Desc |
 
-The display order should be determined from the `crColumns` ordered set, but extracting this mapping requires additional CRDT parsing. For now, the implementation uses storage order.
+### Solution: ZSUMMARY Contains Display Order
+
+**Key discovery**: The `ZSUMMARY` column in `ZICCLOUDSYNCINGOBJECT` contains the column headers in **display order**, separated by newlines.
+
+```sql
+SELECT ZSUMMARY FROM ZICCLOUDSYNCINGOBJECT
+WHERE ZTYPEUTI = 'com.apple.notes.table' AND ZNOTE = 12345;
+
+-- Result: "Date\nMiles\nCost\nPerformed By\nService Desc\n2025-12-..."
+```
+
+The first N lines of ZSUMMARY (where N = number of columns) are the headers in display order. This can be used to reorder columns after extraction.
+
+### Column Reordering Algorithm
+
+```python
+def reorder_columns(table: Table, summary: str) -> Table:
+    # Extract display order from ZSUMMARY
+    display_headers = summary.split("\n")[:table.columns]
+
+    # Get storage order from row 0
+    storage_headers = [table.get_cell(0, col) for col in range(table.columns)]
+
+    # Build mapping: display_col -> storage_col
+    col_mapping = []
+    for display_header in display_headers:
+        for storage_col, storage_header in enumerate(storage_headers):
+            if storage_header == display_header:
+                col_mapping.append(storage_col)
+                break
+
+    # Reorder cells using mapping
+    new_cells = {}
+    for row in range(table.rows):
+        for display_col, storage_col in enumerate(col_mapping):
+            new_cells[(row, display_col)] = table.get_cell(row, storage_col)
+
+    return Table(rows=table.rows, columns=table.columns, cells=new_cells)
+```
 
 ## Sample Table Data
 
@@ -234,8 +272,8 @@ Wire types 3, 4, 6, 7 are deprecated/reserved and should be skipped.
 
 ## Future Work
 
-1. **Column ordering**: Parse `crColumns` ordered set to determine correct display order
-2. **Row ordering**: Parse `crRows` ordered set for row display order
+1. ~~**Column ordering**: Parse `crColumns` ordered set to determine correct display order~~ **SOLVED**: Use ZSUMMARY column for display order
+2. **Row ordering**: Parse `crRows` ordered set for row display order (if different from storage)
 3. **Empty cells**: Handle cells with no content (currently show as empty string)
 4. **Rich text**: Parse formatting within cells (bold, italic, links)
 5. **Merged cells**: Investigate if Apple Notes supports cell merging
