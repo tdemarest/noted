@@ -47,7 +47,9 @@
         <li><a href="#count-notes">Count Notes</a></li>
         <li><a href="#view-a-note">View a Note</a></li>
         <li><a href="#export-formats">Export Formats</a></li>
-        <li><a href="#export-attachments">Export Attachments</a></li>
+        <li><a href="#export-notes">Export Notes</a></li>
+        <li><a href="#full-export">Full Export</a></li>
+        <li><a href="#locked-notes">Locked Notes</a></li>
       </ul>
     </li>
     <li><a href="#how-it-works">How It Works</a></li>
@@ -183,8 +185,8 @@ uv run noted view "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
 Enable debug mode for detailed metadata (UUID, row ID, attachment stats):
 
 ```bash
-uv run noted view --debug 42
-uv run noted view -d 42
+uv run noted --debug view 42
+uv run noted -d view 42
 ```
 
 ### Export Formats
@@ -203,24 +205,54 @@ uv run noted view 42 --json
 uv run noted view 42 --html
 ```
 
-### Export Attachments
+### Export Notes
 
-Export a note with all its attachments:
+Export a single note with all its attachments using the `export` command:
 
 ```bash
 # Export to current directory
-uv run noted view 42 --attachments
-# Creates: ./Note_Title.md and ./Note_Title_attachments/
+uv run noted export 42
+# Creates: ./Note Title.md and ./Note Title_attachments/
 
 # Export to specific path
-uv run noted view 42 -a -o ./backup/my_note
+uv run noted export 42 -o ./backup/my_note
 
 # Export as 7zip archive
-uv run noted view 42 --attachments --zip
-# Creates: ./Note_Title.7z
+uv run noted export 42 --zip
+# Creates: ./Note Title.7z
 ```
 
-The attachment export creates a `manifest.json` with metadata:
+### Full Export
+
+Export ALL notes with nested folder structure mirroring Apple Notes:
+
+```bash
+# Export all notes
+uv run noted export --all
+# Creates: ./notes_export/ with full folder hierarchy
+# Example: notes_export/Work/Projects/Meeting Notes.md
+
+# Export with 7zip archive
+uv run noted export --all --zip
+# Creates: ./notes_export/ AND ./notes_export.7z
+# Progress: "Exporting notes... 150/150 notes" then "Creating archive... 412/412 files"
+
+# Export to custom directory
+uv run noted export --all -o ~/Backups/notes_2026-01-29
+
+# Export only notes from a specific folder (matches anywhere in path)
+uv run noted export --all --folder "Work"
+
+# Export excluding deleted notes
+uv run noted export --all --exclude-deleted
+
+# Verbose mode (show each note as exported)
+uv run noted export --all --verbose
+```
+
+The full export creates an `index.json` manifest at the root with statistics and note metadata.
+
+Each note's attachments directory includes a `manifest.json`:
 
 ```json
 {
@@ -238,6 +270,17 @@ The attachment export creates a `manifest.json` with metadata:
   ]
 }
 ```
+
+### Locked Notes
+
+Apple Notes that are password-protected cannot be read by this tool:
+
+- Locked notes are detected and skipped (content is encrypted)
+- A placeholder markdown file is created explaining the note is locked
+- The `index.json` manifest marks these with `"locked": true`
+- Summary shows: "3 locked notes (placeholders created)"
+
+**To export locked notes:** Unlock them in Apple Notes first, then run the export again.
 
 ### Refresh Database Cache
 
@@ -289,9 +332,11 @@ uv run noted refresh
 - [x] Parse embedded tables
 - [x] 7zip archive export
 - [x] UUID-based note lookup
+- [x] Full export with nested folder hierarchy
+- [x] Progress bars for export operations
+- [x] Locked note detection and placeholders
 - [ ] Search notes by content
 - [ ] PDF export
-- [ ] Batch export all notes
 
 
 See the [open issues](https://github.com/tdemarest/noted/issues) for a full list of proposed features and known issues.
