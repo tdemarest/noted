@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C:*)",
+      "WebFetch(domain:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(LOGURU_LEVEL=ERROR uv run python:*)"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 # Attachment Export Design
 
 **Date:** 2026-01-29
-**Status:** Approved
+**Status:** Implemented
 
 ## Overview
 
@@ -67,6 +67,10 @@ Meeting_Notes.7z contains:
 
 ## Database Layer
 
+> **Implementation Note:** Apple Notes stores attachments as files on disk, not in the SQLite database.
+> The database contains metadata linking to files via the ZMEDIA foreign key relationship.
+> See `docs/apple-notes-attachment-structure.md` for full details.
+
 New function in `db.py`:
 
 ```python
@@ -84,12 +88,16 @@ def get_attachment_data(
         Tuple of (binary_data, type_uti, title), or None if not found
         or attachment has no binary data.
     """
+    # Query attachment and linked media record
     query = """
-        SELECT ZDATA, ZTYPEUTI, ZTITLE
-        FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZIDENTIFIER = ?
-          AND ZDATA IS NOT NULL
+        SELECT att.ZTYPEUTI, att.ZTITLE as att_title,
+               media.ZIDENTIFIER as media_id, media.ZFILENAME
+        FROM ZICCLOUDSYNCINGOBJECT att
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT media ON att.ZMEDIA = media.Z_PK
+        WHERE att.ZIDENTIFIER = ?
     """
+    # ... then reads file from disk at:
+    # ~/Library/Group Containers/group.com.apple.notes/Accounts/<ACCOUNT>/Media/<media_id>/<subfolder>/<filename>
 ```
 
 ### UTI to File Extension Mapping
@@ -253,3 +261,8 @@ $ noted view 123 -a --zip
 3. **cli.py** - Add `--attachments` and `--zip` options, integrate export flow
 4. **pyproject.toml** - Add `py7zr` dependency
 5. **tests/** - Add tests for new functionality
+
+## References
+
+- [Apple Notes Attachment Structure](../apple-notes-attachment-structure.md) - File system layout and database schema
+- [Implementation Plan](./2026-01-29-attachment-export-implementation.md) - Detailed task breakdown

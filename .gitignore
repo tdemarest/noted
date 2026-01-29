@@ -1,0 +1,84 @@
+# ----------------------------
+# OS-specific
+# ----------------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------------
+# IDE / Editor
+# ----------------------------
+.idea/
+.vscode/
+*.swp
+*-workspace
+
+# ----------------------------
+# Node.js
+# ----------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+.env
+.venv
+venv/
+
+# Coverage files - pytest
+.coverage
+.coverage.*
+htmlcov/
+
+# ----------------------------
+# Java / JVM
+# ----------------------------
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+target/
+
+# ----------------------------
+# Logs
+# ----------------------------
+logs/
+*.log
+*.log.zip
+*.out
+*.err
+
+# ----------------------------
+# Misc
+# ----------------------------
+coverage/
+.cache/
+tmp/
+*.tmp
+
+# Git worktrees
+.worktrees/
+
+# Bot state files
+.reminder_cache.json
+
+# Docker
+docker-compose.yaml
+
+# Input and Output files
+output/
+input/

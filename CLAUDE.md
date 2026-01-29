@@ -58,6 +58,32 @@ uv run noted count
 # Count notes by folder
 uv run noted count --by-folder
 
+# View a note (rich terminal output)
+uv run noted view <note_id>
+
+# View note as markdown
+uv run noted view <note_id> --markdown
+
+# View note as JSON
+uv run noted view <note_id> --json
+
+# View note as HTML
+uv run noted view <note_id> --html
+
+# Export note to file (format auto-detected from flags)
+uv run noted view <note_id> --markdown -o ./my_note.md
+
+# Export note with attachments
+uv run noted view <note_id> --attachments
+# Creates: ./Note_Title.md and ./Note_Title_attachments/
+
+# Export note with attachments to specific path
+uv run noted view <note_id> -a -o ./backup/my_note
+
+# Export note and attachments as 7zip archive
+uv run noted view <note_id> --attachments --zip
+# Creates: ./Note_Title.7z
+
 # Force refresh cached database
 uv run noted refresh
 ```
@@ -84,23 +110,31 @@ Edit `.env` to customize the `op://VAULT/ITEM/FIELD` paths to match your 1Passwo
 
 ## PACKAGE STRUCTURE
 
-```
+```shell
 noted/
 ├── pyproject.toml          # Project config, dependencies, CLI entry point
 ├── uv.lock                  # Locked dependencies
 ├── src/noted/
 │   ├── __init__.py         # Package version
-│   ├── cli.py              # Typer CLI commands (list, count, refresh)
+│   ├── attachments.py      # Attachment export, archive creation
+│   ├── cli.py              # Typer CLI commands (list, count, view, refresh)
 │   ├── db.py               # Database caching, connection, queries
 │   ├── display.py          # Rich terminal output formatting
-│   └── models.py           # Note, NoteSummary dataclasses
+│   ├── models.py           # Note, NoteSummary, Attachment dataclasses
+│   ├── protobuf.py         # Protobuf parsing for note content
+│   └── tables.py           # Apple Notes CRDT table parsing
 ├── tests/
+│   ├── test_attachments.py # Attachment export tests
 │   ├── test_cli.py         # CLI command tests
 │   ├── test_db.py          # Database function tests
 │   ├── test_display.py     # Display function tests
 │   ├── test_integration.py # Integration tests
-│   └── test_models.py      # Model tests
+│   ├── test_models.py      # Model tests
+│   ├── test_protobuf.py    # Protobuf parsing tests
+│   └── test_tables.py      # Table parsing tests
 └── docs/
+    ├── apple-notes-attachment-structure.md  # Attachment storage documentation
+    ├── apple-notes-crdt-table-structure.md  # Table CRDT documentation
     └── plans/              # Design and implementation plans
 ```
 
@@ -118,7 +152,7 @@ shutil.copy('NoteStore.sqlite', '/tmp/notes_copy.sqlite')
 ```
 
 - Use read only mode in development:
-- 
+  
 ```python
 # URI mode with read-only flag
 conn = sqlite3.connect('file:path/to/db.sqlite?mode=ro', uri=True)
