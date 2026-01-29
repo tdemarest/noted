@@ -1,5 +1,7 @@
 """CLI commands for noted using Typer."""
 
+from pathlib import Path
+
 import typer
 from loguru import logger
 
@@ -98,6 +100,12 @@ def view(
         "--html",
         help="Output as standalone HTML5 document.",
     ),
+    export: Path | None = typer.Option(
+        None,
+        "--export",
+        "-o",
+        help="Export to file (extension auto-selected based on format).",
+    ),
 ) -> None:
     """View the full content of a note."""
     try:
@@ -145,13 +153,32 @@ def view(
 
         conn.close()
 
-        # Display in requested format
+        # Determine output format and get content
         if json_output or json_styled:
-            display.display_note_json(note, content, include_styling=json_styled)
+            output = display.get_note_json(note, content, include_styling=json_styled)
+            ext = ".json"
         elif html:
-            display.display_note_html(note, content)
+            output = display.get_note_html(note, content)
+            ext = ".html"
         elif markdown:
-            display.display_note_markdown(note, content)
+            output = display.get_note_markdown(note, content)
+            ext = ".md"
+        else:
+            output = None  # Rich text display handled separately
+            ext = ".txt"
+
+        # Export to file or display
+        if export:
+            # Add extension if not provided
+            export_path = export if export.suffix else export.with_suffix(ext)
+            if output is not None:
+                export_path.write_text(output, encoding="utf-8")
+            else:
+                # For rich text, export as plain text
+                export_path.write_text(content.text or "", encoding="utf-8")
+            display.display_success(f"Exported to {export_path}")
+        elif output is not None:
+            print(output)
         else:
             display.display_note_view(note, content)
 

@@ -435,15 +435,15 @@ def table_to_markdown(table: Table) -> str:
     return "\n".join(lines)
 
 
-def display_note_markdown(note: Note, content: NoteContent) -> None:
-    """Output a note as raw markdown text.
-
-    Outputs plain markdown that can be piped to tools like glow,
-    copied to Notion, or saved to a .md file.
+def get_note_markdown(note: Note, content: NoteContent) -> str:
+    """Get a note as raw markdown text.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
+
+    Returns:
+        Markdown-formatted string.
     """
     # Build attachment lookup for inline rendering
     table_lookup: dict[str, Table] = {}
@@ -456,10 +456,20 @@ def display_note_markdown(note: Note, content: NoteContent) -> None:
     md_text = note_to_markdown(content, table_lookup, skip_first_title=True)
 
     # Add title as H1
-    full_md = f"# {note.title}\n\n{md_text}"
+    return f"# {note.title}\n\n{md_text}"
 
-    # Output raw markdown (no Rich formatting)
-    print(full_md)
+
+def display_note_markdown(note: Note, content: NoteContent) -> None:
+    """Output a note as raw markdown text.
+
+    Outputs plain markdown that can be piped to tools like glow,
+    copied to Notion, or saved to a .md file.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+    """
+    print(get_note_markdown(note, content))
 
 
 def note_to_markdown(
@@ -778,15 +788,18 @@ def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) 
     return result
 
 
-def display_note_json(
+def get_note_json(
     note: Note, content: NoteContent, include_styling: bool = False
-) -> None:
-    """Output a note as JSON.
+) -> str:
+    """Get a note as JSON string.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
         include_styling: If True, include detailed styling metadata for each run.
+
+    Returns:
+        JSON-formatted string.
     """
     # Build attachment lookup for tables
     table_lookup: dict[str, Table] = {}
@@ -861,15 +874,31 @@ def display_note_json(
             attachments_data.append(att_data)
         data["attachments"] = attachments_data
 
-    print(json.dumps(data, indent=2, ensure_ascii=False))
+    return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-def display_note_html(note: Note, content: NoteContent) -> None:
-    """Output a note as a standalone HTML5 document with Adeia branding.
+def display_note_json(
+    note: Note, content: NoteContent, include_styling: bool = False
+) -> None:
+    """Output a note as JSON.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
+        include_styling: If True, include detailed styling metadata for each run.
+    """
+    print(get_note_json(note, content, include_styling))
+
+
+def get_note_html(note: Note, content: NoteContent) -> str:
+    """Get a note as a standalone HTML5 document with Adeia branding.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+
+    Returns:
+        HTML5 document string.
     """
     # Build attachment lookup for tables
     table_lookup: dict[str, Table] = {}
@@ -1108,7 +1137,17 @@ def display_note_html(note: Note, content: NoteContent) -> None:
 </body>
 </html>'''
 
-    print(html_doc)
+    return html_doc
+
+
+def display_note_html(note: Note, content: NoteContent) -> None:
+    """Output a note as a standalone HTML5 document with Adeia branding.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+    """
+    print(get_note_html(note, content))
 
 
 def _note_to_html(
