@@ -5,10 +5,12 @@ with master index and optional 7zip compression.
 """
 
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from noted import attachments, db, display, protobuf, tables
 from noted.models import Note
 
 
@@ -211,3 +213,136 @@ def generate_master_index(
         json.dumps(index, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def export_single_note(
+    conn: sqlite3.Connection,
+    note: Note,
+    output_dir: Path,
+    used_folder_names: set[str] | None = None,
+) -> NoteExportResult:
+    """Export a single note to the output directory.
+
+    Creates a folder for the note containing the markdown file
+    and attachments subdirectory (for full export structure).
+
+    Args:
+        conn: Database connection.
+        note: Note to export.
+        output_dir: Base output directory.
+        used_folder_names: Set of already-used folder names for deduplication.
+
+    Returns:
+        NoteExportResult with export status and path.
+    """
+    if used_folder_names is None:
+        used_folder_names = set()
+
+    # Determine folder path
+    folder_name = note.folder or "(No Folder)"
+    folder_path = output_dir / attachments.sanitize_filename(folder_name)
+
+    # Create note folder with unique name
+    note_folder_name = attachments.sanitize_filename(note.title)
+    note_folder_name = make_unique_folder_name(note_folder_name, note.identifier, used_folder_names)
+    note_path = folder_path / note_folder_name
+
+    # Get note content
+    raw_data = db.get_note_content(conn, note.id)
+
+    if raw_data is None:
+        return NoteExportResult(
+            note_id=note.id,
+            identifier=note.identifier,
+            title=note.title,
+            folder=note.folder,
+            status="failed",
+            path=None,
+            attachment_count=0,
+            error="Note has no content",
+        )
+
+    # Check if locked
+    if protobuf.is_note_locked(raw_data):
+        # Create placeholder
+        note_path.mkdir(parents=True, exist_ok=True)
+        note_file = note_path / f"{note_folder_name}.md"
+        note_file.write_text(generate_locked_placeholder(note), encoding="utf-8")
+
+        relative_path = note_file.relative_to(output_dir)
+        return NoteExportResult(
+            note_id=note.id,
+            identifier=note.identifier,
+            title=note.title,
+            folder=note.folder,
+            status="locked",
+            path=relative_path,
+            attachment_count=0,
+            error=None,
+        )
+
+    try:
+        # Parse content
+        attachment_names = db.get_attachment_names(conn, note.id)
+        content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
+
+        # Parse table attachments
+        if content.attachments:
+            for attachment in content.attachments:
+                if attachment.type_uti == "com.apple.notes.table":
+                    result = db.get_table_data(conn, attachment.identifier)
+                    if result:
+                        table_data, summary = result
+                        attachment.table = tables.parse_table_data(table_data, summary)
+
+        # Generate markdown
+        markdown_content = display.get_note_markdown(note, content)
+
+        # Create note folder and write file
+        note_path.mkdir(parents=True, exist_ok=True)
+        note_file = note_path / f"{note_folder_name}.md"
+        note_file.write_text(markdown_content, encoding="utf-8")
+
+        # Export attachments
+        attachment_count = 0
+        if content.attachments:
+            # For full export, attachments go in note_path/attachments/
+            att_result = attachments.export_attachments(
+                conn=conn,
+                attachments=content.attachments,
+                output_dir=note_path,
+                base_name="attachments",
+                note=note,
+            )
+            attachment_count = len(att_result.exported)
+
+            # Rename attachments folder if created (remove "_attachments" suffix)
+            # The export_attachments function creates "{base_name}_attachments"
+            old_att_dir = note_path / "attachments_attachments"
+            new_att_dir = note_path / "attachments"
+            if old_att_dir.exists() and not new_att_dir.exists():
+                old_att_dir.rename(new_att_dir)
+
+        relative_path = note_file.relative_to(output_dir)
+        return NoteExportResult(
+            note_id=note.id,
+            identifier=note.identifier,
+            title=note.title,
+            folder=note.folder,
+            status="success",
+            path=relative_path,
+            attachment_count=attachment_count,
+            error=None,
+        )
+
+    except Exception as e:
+        return NoteExportResult(
+            note_id=note.id,
+            identifier=note.identifier,
+            title=note.title,
+            folder=note.folder,
+            status="failed",
+            path=None,
+            attachment_count=0,
+            error=str(e),
+        )

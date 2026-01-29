@@ -1,6 +1,8 @@
 """Tests for noted.export module."""
 
+import gzip
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -233,3 +235,130 @@ def test_generate_master_index(tmp_path: Path) -> None:
     error1 = data["errors"][0]
     assert error1["note_id"] == 99
     assert error1["error"] == "Decompression failed"
+
+
+def test_export_single_note(tmp_path: Path) -> None:
+    """Test exporting a single note to folder structure."""
+    from noted.export import export_single_note
+
+    # Create minimal test database
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT,
+            ZMERGEABLEDATA1 BLOB,
+            ZSUMMARY TEXT,
+            ZNOTE INTEGER
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE ZICNOTEDATA (
+            Z_PK INTEGER PRIMARY KEY,
+            ZNOTE INTEGER,
+            ZDATA BLOB
+        )
+    """)
+
+    # Build minimal gzipped protobuf for "Hello, World!"
+    # Structure: root -> document -> note -> text
+    note_proto = b"\x12\x0dHello, World!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    # Insert note record (required for the JOIN in get_note_content)
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1)
+           VALUES (?, ?, ?)""",
+        (1, "test-uuid-123", "Test Note"),
+    )
+    # Insert note data
+    conn.execute(
+        "INSERT INTO ZICNOTEDATA (Z_PK, ZNOTE, ZDATA) VALUES (?, ?, ?)",
+        (1, 1, compressed),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    note = Note(
+        id=1,
+        identifier="test-uuid-123",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    output_dir = tmp_path / "export"
+    result = export_single_note(conn, note, output_dir)
+
+    conn.close()
+
+    assert result.status == "success"
+    assert result.path is not None
+    assert result.error is None
+
+    # Check file was created
+    note_file = output_dir / result.path
+    assert note_file.exists()
+    content = note_file.read_text()
+    assert "Test Note" in content
+    assert "Hello" in content
+
+
+def test_export_single_note_no_content(tmp_path: Path) -> None:
+    """Test exporting a note with no content returns failed status."""
+    from noted.export import export_single_note
+
+    # Create database without note data
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE ZICNOTEDATA (
+            Z_PK INTEGER PRIMARY KEY,
+            ZNOTE INTEGER,
+            ZDATA BLOB
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    note = Note(
+        id=999,
+        identifier="nonexistent",
+        title="Missing Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    output_dir = tmp_path / "export"
+    result = export_single_note(conn, note, output_dir)
+
+    conn.close()
+
+    assert result.status == "failed"
+    assert result.error is not None
+    assert "no content" in result.error.lower()
