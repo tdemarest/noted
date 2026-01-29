@@ -214,12 +214,19 @@ uv run noted view 42 --html
 Export a single note with all its attachments using the `export` command:
 
 ```bash
-# Export to current directory
+# Export to current directory (default: markdown)
 uv run noted export 42
 # Creates: ./Note Title.md and ./Note Title_attachments/
 
+# Export in different formats
+uv run noted export 42 --markdown      # Markdown (default)
+uv run noted export 42 --json          # JSON
+uv run noted export 42 --json-styled   # JSON with styling metadata
+uv run noted export 42 --html          # Standalone HTML5
+
 # Export to specific path
 uv run noted export 42 -o ./backup/my_note
+uv run noted export 42 --json -o ./backup/my_note.json
 
 # Export as 7zip archive
 uv run noted export 42 --zip

@@ -385,8 +385,34 @@ def export(
         "-v",
         help="Show detailed output for each note.",
     ),
+    fmt_markdown: bool = typer.Option(
+        False,
+        "--markdown",
+        "-md",
+        help="Export as markdown (default for single note).",
+    ),
+    fmt_json: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Export as JSON (single note only).",
+    ),
+    fmt_json_styled: bool = typer.Option(
+        False,
+        "--json-styled",
+        help="Include styling metadata in JSON output (single note only).",
+    ),
+    fmt_html: bool = typer.Option(
+        False,
+        "--html",
+        help="Export as standalone HTML5 document (single note only).",
+    ),
 ) -> None:
-    """Export notes to markdown with attachments."""
+    """Export notes to markdown with attachments.
+
+    For single note export, format options are available:
+    --markdown (default), --json, --json-styled, --html
+    """
     # Validate: need either --all or note_ref
     if not all_notes and note_ref is None:
         display.display_error("Specify either --all or a note ID/UUID to export.")
@@ -394,6 +420,14 @@ def export(
 
     if all_notes and note_ref is not None:
         display.display_error("Cannot use --all with a specific note ID.")
+        raise typer.Exit(code=1)
+
+    # Validate: format options only apply to single note export
+    format_options_used = fmt_json or fmt_json_styled or fmt_html
+    if all_notes and format_options_used:
+        display.display_error(
+            "Format options (--json, --json-styled, --html) only apply to single note export."
+        )
         raise typer.Exit(code=1)
 
     try:
@@ -480,13 +514,26 @@ def export(
                             table_data, summary = table_result
                             attachment.table = tables.parse_table_data(table_data, summary)
 
-            # Write markdown
-            markdown = display.get_note_markdown(note, content)
-            note_path = base_path.with_suffix(".md")
-            note_path.parent.mkdir(parents=True, exist_ok=True)
-            note_path.write_text(markdown, encoding="utf-8")
+            # Determine output format and generate content
+            if fmt_json or fmt_json_styled:
+                output_content = display.get_note_json(
+                    note, content, include_styling=fmt_json_styled
+                )
+                ext = ".json"
+            elif fmt_html:
+                output_content = display.get_note_html(note, content)
+                ext = ".html"
+            else:
+                # Default to markdown (explicit --markdown or no format specified)
+                output_content = display.get_note_markdown(note, content)
+                ext = ".md"
 
-            # Export attachments
+            # Write to file
+            note_path = base_path.with_suffix(ext)
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            note_path.write_text(output_content, encoding="utf-8")
+
+            # Export attachments (for all formats)
             att_result = attachments.AttachmentExportResult(
                 exported=[], skipped=[], manifest_path=None, attachments_dir=None
             )
