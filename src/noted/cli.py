@@ -8,7 +8,8 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from noted import db, display, protobuf, tables
+from noted import attachments, db, display, protobuf, tables
+from noted import export as export_module
 
 # Debug mode state (set by callback)
 _debug_mode = False
@@ -153,31 +154,17 @@ def view(
         "--html",
         help="Output as standalone HTML5 document.",
     ),
-    export: Path | None = typer.Option(
+    export_path: Path | None = typer.Option(
         None,
         "--export",
         "-o",
         help="Export to file (extension auto-selected based on format).",
     ),
-    attachments_flag: bool = typer.Option(
-        False,
-        "--attachments",
-        "-a",
-        help="Export attachments alongside note file.",
-    ),
-    zip_archive: bool = typer.Option(
-        False,
-        "--zip",
-        "-z",
-        help="Compress output as 7zip archive (requires --attachments).",
-    ),
 ) -> None:
-    """View the full content of a note."""
-    # Validate options
-    if zip_archive and not attachments_flag:
-        display.display_error("--zip requires --attachments")
-        raise typer.Exit(code=1)
+    """View the full content of a note.
 
+    For exporting notes with attachments, use the 'export' command instead.
+    """
     try:
         conn = db.get_connection()
 
@@ -226,6 +213,8 @@ def view(
                         table_data, summary = result
                         attachment.table = tables.parse_table_data(table_data, summary)
 
+        conn.close()
+
         # Determine output format and get content
         if json_output or json_styled:
             output = display.get_note_json(note, content, include_styling=json_styled)
@@ -240,81 +229,20 @@ def view(
             output = None  # Rich text display handled separately
             ext = ".txt"
 
-        # Handle attachments export
-        if attachments_flag:
-            from collections import Counter
-
-            from noted import attachments as att_module
-
-            # Determine base path
-            if export:
-                base_path = export.with_suffix("")
+        # Export to file or display
+        if export_path:
+            # Add extension if not provided
+            final_path = export_path if export_path.suffix else export_path.with_suffix(ext)
+            if output is not None:
+                final_path.write_text(output, encoding="utf-8")
             else:
-                base_path = Path.cwd() / att_module.sanitize_filename(note.title)
-
-            # Ensure we have markdown output for export (default if none specified)
-            if output is None:
-                output = display.get_note_markdown(note, content)
-                ext = ".md"
-
-            # Write note file
-            note_path = base_path.with_suffix(ext)
-            note_path.write_text(output, encoding="utf-8")
-
-            # Export attachments
-            export_result = att_module.AttachmentExportResult(
-                exported=[], skipped=[], manifest_path=None, attachments_dir=None
-            )
-            if content.attachments:
-                export_result = att_module.export_attachments(
-                    conn=conn,
-                    attachments=content.attachments,
-                    output_dir=base_path.parent,
-                    base_name=base_path.name,
-                    note=note,
-                )
-
-            conn.close()
-
-            # Create archive if requested
-            if zip_archive:
-                archive_path = att_module.create_archive(
-                    base_path, note_path, export_result.attachments_dir
-                )
-                display.display_success(f"Created archive: {archive_path}")
-            else:
-                display.display_success(f"Exported to {note_path}")
-
-            # Report attachment results
-            if export_result.exported:
-                display.display_success(f"Exported {len(export_result.exported)} attachments")
-            if export_result.skipped:
-                # Summarize skipped by type
-                type_counts = Counter(
-                    protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in export_result.skipped
-                )
-                summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
-                display.display_warning(
-                    f"Skipped {len(export_result.skipped)} non-exportable: {summary}"
-                )
-
+                # For rich text, export as plain text
+                final_path.write_text(content.text or "", encoding="utf-8")
+            display.display_success(f"Exported to {final_path}")
+        elif output is not None:
+            print(output)
         else:
-            conn.close()
-
-            # Export to file or display
-            if export:
-                # Add extension if not provided
-                export_path = export if export.suffix else export.with_suffix(ext)
-                if output is not None:
-                    export_path.write_text(output, encoding="utf-8")
-                else:
-                    # For rich text, export as plain text
-                    export_path.write_text(content.text or "", encoding="utf-8")
-                display.display_success(f"Exported to {export_path}")
-            elif output is not None:
-                print(output)
-            else:
-                display.display_note_view(note, content)
+            display.display_note_view(note, content)
 
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")
@@ -323,6 +251,184 @@ def view(
         raise
     except Exception as e:
         logger.exception("Error viewing note")
+        display.display_error(str(e))
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def export(
+    note_ref: str | None = typer.Argument(
+        None,
+        help="Note ID or UUID to export. Omit for --all.",
+    ),
+    all_notes: bool = typer.Option(
+        False,
+        "--all",
+        "-A",
+        help="Export all notes.",
+    ),
+    output: Path = typer.Option(
+        Path("./notes_export"),
+        "--output",
+        "-o",
+        help="Output directory.",
+    ),
+    zip_archive: bool = typer.Option(
+        False,
+        "--zip",
+        "-z",
+        help="Also create 7zip archive.",
+    ),
+    folder_filter: str | None = typer.Option(
+        None,
+        "--folder",
+        "-f",
+        help="Export only notes from this folder.",
+    ),
+    exclude_deleted: bool = typer.Option(
+        False,
+        "--exclude-deleted",
+        help="Exclude notes in Recently Deleted.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed output for each note.",
+    ),
+) -> None:
+    """Export notes to markdown with attachments."""
+    # Validate: need either --all or note_ref
+    if not all_notes and note_ref is None:
+        display.display_error("Specify either --all or a note ID/UUID to export.")
+        raise typer.Exit(code=1)
+
+    if all_notes and note_ref is not None:
+        display.display_error("Cannot use --all with a specific note ID.")
+        raise typer.Exit(code=1)
+
+    try:
+        conn = db.get_connection()
+
+        if all_notes:
+            # Full export
+            options = export_module.ExportOptions(
+                output_dir=output,
+                include_deleted=not exclude_deleted,
+                create_archive=zip_archive,
+                folder_filter=folder_filter,
+                verbose=verbose,
+            )
+
+            result = export_module.export_all_notes(conn, options)
+            conn.close()
+
+            # Display summary
+            display.display_success(
+                f"Exported {result.exported_count} notes to {result.output_dir}"
+            )
+            if result.locked_count > 0:
+                display.display_warning(
+                    f"{result.locked_count} locked notes (placeholders created)"
+                )
+            if result.failed_count > 0:
+                display.display_error(f"{result.failed_count} notes failed (see index.json)")
+            if result.total_attachments > 0:
+                console.print(f"[dim]Total attachments: {result.total_attachments}[/dim]")
+            if result.archive_path:
+                display.display_success(f"Created archive: {result.archive_path}")
+
+        else:
+            # Single note export
+            assert note_ref is not None  # Validated above
+            note = db.get_note(conn, note_ref)
+            if note is None:
+                display.display_error(f"Note '{note_ref}' not found.")
+                conn.close()
+                raise typer.Exit(code=1)
+
+            # Use flat structure for single note (like old view --attachments)
+            base_name = attachments.sanitize_filename(note.title)
+            # If default output, use current directory with note name
+            if output == Path("./notes_export"):
+                base_path = Path.cwd() / base_name
+            else:
+                base_path = output.with_suffix("")
+
+            # Get note content
+            raw_data = db.get_note_content(conn, note.id)
+            if raw_data is None:
+                conn.close()
+                display.display_error("Note has no content.")
+                raise typer.Exit(code=1)
+
+            if protobuf.is_note_locked(raw_data):
+                conn.close()
+                display.display_error("Note is locked and cannot be exported.")
+                raise typer.Exit(code=1)
+
+            # Parse and export
+            attachment_names = db.get_attachment_names(conn, note.id)
+            content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
+
+            if content.attachments:
+                for attachment in content.attachments:
+                    if attachment.type_uti == "com.apple.notes.table":
+                        table_result = db.get_table_data(conn, attachment.identifier)
+                        if table_result:
+                            table_data, summary = table_result
+                            attachment.table = tables.parse_table_data(table_data, summary)
+
+            # Write markdown
+            markdown = display.get_note_markdown(note, content)
+            note_path = base_path.with_suffix(".md")
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            note_path.write_text(markdown, encoding="utf-8")
+
+            # Export attachments
+            att_result = attachments.AttachmentExportResult(
+                exported=[], skipped=[], manifest_path=None, attachments_dir=None
+            )
+            if content.attachments:
+                att_result = attachments.export_attachments(
+                    conn=conn,
+                    attachments=content.attachments,
+                    output_dir=base_path.parent,
+                    base_name=base_name,
+                    note=note,
+                )
+
+            conn.close()
+
+            # Create archive if requested
+            if zip_archive:
+                archive_path = attachments.create_archive(
+                    base_path, note_path, att_result.attachments_dir
+                )
+                display.display_success(f"Created archive: {archive_path}")
+            else:
+                display.display_success(f"Exported to {note_path}")
+
+            if att_result.exported:
+                display.display_success(f"Exported {len(att_result.exported)} attachments")
+            if att_result.skipped:
+                from collections import Counter
+
+                type_counts = Counter(
+                    protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in att_result.skipped
+                )
+                summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
+                display.display_warning(
+                    f"Skipped {len(att_result.skipped)} non-exportable: {summary}"
+                )
+
+    except FileNotFoundError:
+        display.display_error("Apple Notes database not found.")
+        raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        logger.exception("Error exporting notes")
         display.display_error(str(e))
         raise typer.Exit(code=1)
 

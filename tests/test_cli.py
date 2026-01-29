@@ -2,7 +2,6 @@
 
 import gzip
 from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -136,45 +135,6 @@ def test_view_command_locked() -> None:
 
     assert result.exit_code == 1
     assert "locked" in result.output.lower()
-
-
-def test_view_zip_without_attachments() -> None:
-    """Test that --zip without --attachments shows error."""
-    result = runner.invoke(app, ["view", "42", "--zip"])
-    assert result.exit_code == 1
-    assert "requires" in result.output.lower() or "attachments" in result.output.lower()
-
-
-def test_view_attachments_flag_exports(tmp_path: Path) -> None:
-    """Test --attachments flag triggers export."""
-    mock_note = Note(
-        id=42,
-        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
-        title="Test Note",
-        folder="Work",
-        created=None,
-        modified=None,
-    )
-
-    # Build valid protobuf with no attachments
-    note_proto = b"\x12\x0dHello, world!"
-    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
-    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
-    compressed = gzip.compress(root_proto)
-
-    with (
-        patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_note", return_value=mock_note),
-        patch("noted.cli.db.get_note_content", return_value=compressed),
-        patch("noted.cli.db.get_attachment_names", return_value={}),
-        patch("noted.cli.Path.cwd", return_value=tmp_path),
-    ):
-        result = runner.invoke(app, ["view", "42", "--attachments"])
-
-    assert result.exit_code == 0
-    # Should create note file in tmp_path
-    note_files = list(tmp_path.glob("*.md")) + list(tmp_path.glob("*.txt"))
-    assert len(note_files) >= 1 or "Exported" in result.output
 
 
 def test_debug_option_shows_uuid() -> None:
@@ -401,3 +361,25 @@ def test_debug_zero_attachments() -> None:
     assert result.exit_code == 0
     # Should still show attachment info, even if 0
     assert "Attachment" in result.output
+
+
+def test_export_command_help() -> None:
+    """Test export command has help text."""
+    result = runner.invoke(app, ["export", "--help"])
+    assert result.exit_code == 0
+    assert "Export notes" in result.output or "export" in result.output.lower()
+    assert "--all" in result.output
+
+
+def test_export_requires_all_or_note_id() -> None:
+    """Test export requires either --all or note_id."""
+    result = runner.invoke(app, ["export"])
+    assert result.exit_code == 1
+    assert "either" in result.output.lower() or "specify" in result.output.lower()
+
+
+def test_export_all_not_with_note_id() -> None:
+    """Test export --all cannot be used with a note_id."""
+    result = runner.invoke(app, ["export", "42", "--all"])
+    assert result.exit_code == 1
+    assert "cannot" in result.output.lower()
