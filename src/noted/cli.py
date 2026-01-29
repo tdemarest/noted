@@ -76,6 +76,12 @@ def refresh() -> None:
 @app.command()
 def view(
     note_id: int = typer.Argument(..., help="Note ID to view (from list command)."),
+    markdown: bool = typer.Option(
+        False,
+        "--markdown",
+        "-md",
+        help="Display note as rendered markdown.",
+    ),
 ) -> None:
     """View the full content of a note."""
     try:
@@ -124,7 +130,10 @@ def view(
         conn.close()
 
         # Display
-        display.display_note_view(note, content)
+        if markdown:
+            display.display_note_markdown(note, content)
+        else:
+            display.display_note_view(note, content)
 
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")

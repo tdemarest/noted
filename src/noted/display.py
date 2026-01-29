@@ -117,14 +117,17 @@ def display_note_view(note: Note, content: NoteContent) -> None:
 
     # Build attachment lookup for inline rendering
     table_lookup: dict[str, Table] = {}
+    table_identifiers: list[str] = []
     if content.attachments:
         for att in content.attachments:
-            if att.table is not None:
-                table_lookup[att.identifier] = att.table
+            if att.type_uti == "com.apple.notes.table":
+                table_identifiers.append(att.identifier)
+                if att.table is not None:
+                    table_lookup[att.identifier] = att.table
 
     # Use formatted rendering if available
     if content.formatted_runs:
-        _render_formatted_content(content.formatted_runs, table_lookup)
+        _render_formatted_content(content.formatted_runs, table_lookup, table_identifiers)
     elif content.text:
         _render_text_with_tables(content.text, table_lookup)
     else:
@@ -134,15 +137,18 @@ def display_note_view(note: Note, content: NoteContent) -> None:
 def _render_formatted_content(
     runs: list[FormattedRun],
     table_lookup: dict[str, Table],
+    table_identifiers: list[str],
 ) -> None:
     """Render formatted content with rich styling.
 
     Args:
         runs: List of formatted text runs.
         table_lookup: Mapping of table identifier to parsed Table.
+        table_identifiers: Ordered list of table attachment identifiers.
     """
-    # Table marker pattern
-    table_pattern = re.compile(r"\[Table:([^\]]+)\]")
+    # Object replacement character used by Apple Notes for attachments
+    object_replacement_char = "\ufffc"
+    attachment_index = 0
 
     # Track numbered list counter
     numbered_list_count = 0
@@ -158,15 +164,18 @@ def _render_formatted_content(
         style = run.text_style
         para_type = para.paragraph_type if para else None
 
-        # Check for table markers
-        table_match = table_pattern.search(text)
-        if table_match:
-            identifier = table_match.group(1)
-            if identifier in table_lookup:
-                rich_table = table_to_rich(table_lookup[identifier])
-                console.print(rich_table)
+        # Handle attachment placeholders (U+FFFC) - tables
+        if object_replacement_char in text:
+            if attachment_index < len(table_identifiers):
+                identifier = table_identifiers[attachment_index]
+                attachment_index += 1
+                if identifier in table_lookup:
+                    rich_table = table_to_rich(table_lookup[identifier])
+                    console.print(rich_table)
+                else:
+                    console.print("[Table]", end="")
             else:
-                console.print("[Table]", end="")
+                console.print("[Attachment]", end="")
             i += 1
             continue
 
@@ -225,11 +234,13 @@ def _render_formatted_content(
                     break
             i = j
 
-            # Build the item text with styling
+            # Build the item text with styling and exposed link URLs
             item_text = Text()
             for r in item_runs:
                 char_style = _get_char_style(r.text_style, r.link)
                 item_text.append(r.text, style=char_style or None)
+                if r.link:
+                    item_text.append(f" ({r.link})", style="dim")
 
             # Determine indent and prefix
             indent = "  " * (para.indent_level if para else 0)
@@ -290,13 +301,19 @@ def _render_formatted_content(
         # Regular text with character styling
         char_style = _get_char_style(style, run.link)
 
+        # Build text with link URL exposed if present
+        display_text = Text()
+        display_text.append(text, style=char_style or None)
+        if run.link:
+            display_text.append(f" ({run.link})", style="dim")
+
         # Handle alignment
         if para and para.alignment == TextAlignment.CENTER:
-            console.print(text, style=char_style or None, justify="center", end="")
+            console.print(display_text, justify="center", end="")
         elif para and para.alignment == TextAlignment.RIGHT:
-            console.print(text, style=char_style or None, justify="right", end="")
+            console.print(display_text, justify="right", end="")
         else:
-            console.print(text, style=char_style or None, end="")
+            console.print(display_text, end="")
 
         i += 1
 
@@ -414,3 +431,282 @@ def table_to_markdown(table: Table) -> str:
         lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines)
+
+
+def display_note_markdown(note: Note, content: NoteContent) -> None:
+    """Output a note as raw markdown text.
+
+    Outputs plain markdown that can be piped to tools like glow,
+    copied to Notion, or saved to a .md file.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+    """
+    # Build attachment lookup for inline rendering
+    table_lookup: dict[str, Table] = {}
+    if content.attachments:
+        for att in content.attachments:
+            if att.table is not None:
+                table_lookup[att.identifier] = att.table
+
+    # Convert to markdown (skip_title=True since we add our own)
+    md_text = note_to_markdown(content, table_lookup, skip_first_title=True)
+
+    # Add title as H1
+    full_md = f"# {note.title}\n\n{md_text}"
+
+    # Output raw markdown (no Rich formatting)
+    print(full_md)
+
+
+def note_to_markdown(
+    content: NoteContent,
+    table_lookup: dict[str, Table],
+    skip_first_title: bool = False,
+) -> str:
+    """Convert note content to markdown string.
+
+    Args:
+        content: Parsed note content with formatted runs.
+        table_lookup: Mapping of table identifier to parsed Table.
+        skip_first_title: If True, skip the first TITLE paragraph (to avoid
+            duplicating the note title we add separately).
+
+    Returns:
+        Markdown-formatted string.
+    """
+    if not content.formatted_runs:
+        return content.text or ""
+
+    skipped_first_title = False
+
+    # Object replacement character used by Apple Notes for attachments
+    object_replacement_char = "\ufffc"
+
+    # Build list of table attachments in order for matching U+FFFC occurrences
+    table_attachments: list[str] = []
+    if content.attachments:
+        for att in content.attachments:
+            if att.type_uti == "com.apple.notes.table":
+                table_attachments.append(att.identifier)
+    attachment_index = 0
+
+    lines: list[str] = []
+    current_line = ""
+
+    # Track list state
+    numbered_list_count = 0
+    last_list_type: int | None = None
+
+    i = 0
+    runs = content.formatted_runs
+    while i < len(runs):
+        run = runs[i]
+        text = run.text
+
+        # Handle attachment placeholders (U+FFFC)
+        if object_replacement_char in text:
+            if current_line:
+                lines.append(current_line)
+                current_line = ""
+            # Look up table by attachment order
+            if attachment_index < len(table_attachments):
+                identifier = table_attachments[attachment_index]
+                attachment_index += 1
+                if identifier in table_lookup:
+                    lines.append(table_to_markdown(table_lookup[identifier]))
+                else:
+                    lines.append("[Table]")
+            else:
+                lines.append("[Attachment]")
+            i += 1
+            continue
+        para = run.paragraph_style
+        style = run.text_style
+        para_type = para.paragraph_type if para else None
+
+        # Handle code blocks
+        if para_type == ParagraphType.MONOSPACE:
+            code_text = text
+            j = i + 1
+            while j < len(runs):
+                next_para = runs[j].paragraph_style
+                if next_para and next_para.paragraph_type == ParagraphType.MONOSPACE:
+                    code_text += runs[j].text
+                    j += 1
+                else:
+                    break
+            i = j
+            if current_line:
+                lines.append(current_line)
+                current_line = ""
+            lines.append(f"```\n{code_text.rstrip()}\n```")
+            continue
+
+        # Handle block quotes
+        if para and para.is_quote:
+            quote_text = text
+            j = i + 1
+            while j < len(runs):
+                next_para = runs[j].paragraph_style
+                if next_para and next_para.is_quote:
+                    quote_text += runs[j].text
+                    j += 1
+                else:
+                    break
+            i = j
+            if current_line:
+                lines.append(current_line)
+                current_line = ""
+            # Add > prefix to each line
+            quote_lines = quote_text.strip().split("\n")
+            lines.extend(f"> {line}" for line in quote_lines)
+            continue
+
+        # Handle lists
+        if para_type in (
+            ParagraphType.BULLET_LIST,
+            ParagraphType.DASHED_LIST,
+            ParagraphType.NUMBERED_LIST,
+            ParagraphType.CHECKLIST,
+        ):
+            # Collect all runs for this list item
+            item_runs = [run]
+            j = i + 1
+            while j < len(runs) and "\n" not in runs[j - 1].text:
+                next_para = runs[j].paragraph_style
+                next_type = next_para.paragraph_type if next_para else None
+                if next_type == para_type:
+                    item_runs.append(runs[j])
+                    j += 1
+                else:
+                    break
+            i = j
+
+            # Build item text with markdown styling
+            item_text = ""
+            for r in item_runs:
+                styled = _apply_markdown_style(r.text, r.text_style, r.link)
+                item_text += styled
+
+            # Determine indent and prefix
+            indent = "  " * (para.indent_level if para else 0)
+
+            if para_type == ParagraphType.BULLET_LIST:
+                prefix = f"{indent}- "
+                last_list_type = para_type
+            elif para_type == ParagraphType.DASHED_LIST:
+                prefix = f"{indent}- "
+                last_list_type = para_type
+            elif para_type == ParagraphType.NUMBERED_LIST:
+                if last_list_type != ParagraphType.NUMBERED_LIST:
+                    numbered_list_count = 0
+                numbered_list_count += 1
+                prefix = f"{indent}{numbered_list_count}. "
+                last_list_type = para_type
+            elif para_type == ParagraphType.CHECKLIST:
+                is_checked = para.is_checked if para else False
+                checkbox = "[x]" if is_checked else "[ ]"
+                prefix = f"{indent}- {checkbox} "
+                last_list_type = para_type
+            else:
+                prefix = ""
+
+            if current_line:
+                lines.append(current_line)
+                current_line = ""
+            lines.append(f"{prefix}{item_text.rstrip()}")
+            continue
+
+        # Handle headings - aggregate all consecutive runs of same type
+        if para_type in (
+            ParagraphType.TITLE,
+            ParagraphType.HEADING,
+            ParagraphType.SUBHEADING,
+        ):
+            heading_text = text
+            j = i + 1
+            while j < len(runs):
+                next_para = runs[j].paragraph_style
+                next_type = next_para.paragraph_type if next_para else None
+                if next_type == para_type:
+                    heading_text += runs[j].text
+                    j += 1
+                else:
+                    break
+            i = j
+
+            if current_line:
+                lines.append(current_line)
+                current_line = ""
+
+            heading_text = heading_text.rstrip()
+
+            # Skip first title if requested (to avoid duplicating note title)
+            if (
+                para_type == ParagraphType.TITLE
+                and skip_first_title
+                and not skipped_first_title
+            ):
+                skipped_first_title = True
+                continue
+
+            if para_type == ParagraphType.TITLE:
+                lines.append(f"# {heading_text}")
+            elif para_type == ParagraphType.HEADING:
+                lines.append(f"## {heading_text}")
+            else:
+                lines.append(f"### {heading_text}")
+            continue
+
+        # Regular text with styling
+        styled = _apply_markdown_style(text, style, run.link)
+
+        # Handle newlines
+        if "\n" in styled:
+            parts = styled.split("\n")
+            current_line += parts[0]
+            lines.append(current_line)
+            for part in parts[1:-1]:
+                lines.append(part)
+            current_line = parts[-1]
+        else:
+            current_line += styled
+
+        i += 1
+
+    # Don't forget remaining text
+    if current_line:
+        lines.append(current_line)
+
+    return "\n".join(lines)
+
+
+def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) -> str:
+    """Apply markdown formatting to text.
+
+    Note: Apple Notes splits text into tiny runs (sometimes character-by-character),
+    which makes wrapping each run in `**` or `~~` markers produce broken output.
+    We only apply link formatting here since it works at the run level.
+
+    Args:
+        text: The text to style.
+        style: Text styling info (currently unused due to run fragmentation).
+        link: URL if this is a hyperlink.
+
+    Returns:
+        Markdown-formatted text.
+    """
+    # Note: Bold, italic, strikethrough markers are not applied because
+    # Apple Notes fragments text into tiny runs, creating broken markdown
+    # like "**H****e****l****l****o**" instead of "**Hello**"
+    _ = style  # Acknowledge unused parameter
+
+    # Links work at the run level
+    if link:
+        link_text = text.strip()
+        if link_text:
+            return f"[{link_text}]({link})"
+
+    return text

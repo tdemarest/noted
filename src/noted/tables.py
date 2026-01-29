@@ -253,7 +253,7 @@ def _extract_cells_from_field10(obj: dict[int, list[tuple[int, Any]]]) -> list[s
     return cells
 
 
-def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
+def _parse_mergeable_data_object(obj_data: bytes, summary: str = "") -> Table | None:
     """Parse MergableDataObject to extract table structure.
 
     Apple Notes tables store cells column-by-column, with each column's
@@ -262,6 +262,7 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
 
     Args:
         obj_data: Raw bytes of the MergableDataObject.
+        summary: Optional ZSUMMARY text for dimension inference.
 
     Returns:
         Table with parsed cells, or None if parsing fails.
@@ -336,8 +337,33 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
 
         return Table(rows=num_rows, columns=num_cols, cells=storage_grid)
 
-    # Fallback: single column
-    cells: dict[tuple[int, int], str] = {}
+    # Fallback: use summary to infer dimensions
+    # ZSUMMARY contains data in row-major display order
+    if summary:
+        summary_lines = [line.strip() for line in summary.split("\n") if line.strip()]
+        num_summary_values = len(summary_lines)
+
+        # Try to find a column count that divides evenly
+        # Start with likely small column counts
+        for num_cols in [2, 3, 4, 5]:
+            if num_summary_values % num_cols == 0:
+                num_rows = num_summary_values // num_cols
+
+                # Verify that summary values match our cell_values (in some order)
+                cell_set = set(cell_values)
+                summary_set = set(summary_lines)
+
+                # If sets match reasonably, use summary order for grid
+                if len(cell_set & summary_set) >= len(summary_set) * 0.8:
+                    cells: dict[tuple[int, int], str] = {}
+                    for i, val in enumerate(summary_lines):
+                        row = i // num_cols
+                        col = i % num_cols
+                        cells[(row, col)] = val
+                    return Table(rows=num_rows, columns=num_cols, cells=cells)
+
+    # Final fallback: single column
+    cells = {}
     for i, val in enumerate(cell_values):
         cells[(i, 0)] = val
 
@@ -586,8 +612,8 @@ def parse_table_data(data: bytes, summary: str = "") -> Table | None:
         if not isinstance(obj_data, bytes):
             return _fallback_string_extraction(decompressed)
 
-        table = _parse_mergeable_data_object(obj_data)
-        if table and summary:
+        table = _parse_mergeable_data_object(obj_data, summary)
+        if table and summary and table.columns > 1:
             table = _reorder_columns_by_summary(table, summary)
             table = _reorder_rows_by_summary(table, summary)
         return table

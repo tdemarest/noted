@@ -12,6 +12,7 @@ Key characteristics:
 - Headers appear at the **end** of each column's cell range
 - The storage order of columns may differ from display order (SOLVED via ZSUMMARY)
 - The storage order of rows may differ from display order (SOLVED via ZSUMMARY)
+- ZSUMMARY contains all cell values in **row-major display order**, enabling dimension inference for tables with non-standard headers
 
 ## Protobuf Structure Hierarchy
 
@@ -228,6 +229,12 @@ Both column and row ordering are now correct:
 
 ## Parsing Algorithm
 
+The parser uses two strategies to determine table dimensions:
+
+### Strategy 1: Known Header Detection
+
+For tables with common headers (Date, Miles, Cost, Name, etc.), the parser detects headers at the end of each column's cell range:
+
 ```python
 def parse_table(obj_data: bytes) -> Table:
     obj = decode_fields(obj_data)
@@ -251,20 +258,61 @@ def parse_table(obj_data: bytes) -> Table:
     cells_per_col = header_positions[0][0] + 1  # First header position + 1
     num_rows = cells_per_col
 
-    # 4. Reconstruct grid
+    # 4. Reconstruct grid (headers at row 0, data in rows 1+)
     grid = {}
     for col in range(num_cols):
         col_start = col * cells_per_col
         col_end = col_start + cells_per_col
-
-        # Header in row 0
-        grid[(0, col)] = cells[col_end - 1]
-
-        # Data in rows 1+
+        grid[(0, col)] = cells[col_end - 1]  # Header
         for i, cell_idx in enumerate(range(col_start, col_end - 1)):
-            grid[(i + 1, col)] = cells[cell_idx]
+            grid[(i + 1, col)] = cells[cell_idx]  # Data
 
     return Table(rows=num_rows, columns=num_cols, cells=grid)
+```
+
+### Strategy 2: ZSUMMARY-Based Dimension Inference
+
+When headers aren't in the known set (e.g., "Feature", "Shortcut"), the parser falls back to using ZSUMMARY to infer dimensions:
+
+```python
+def infer_dimensions_from_summary(cell_values: list[str], summary: str) -> Table:
+    # ZSUMMARY contains data in row-major display order
+    summary_lines = [line.strip() for line in summary.split("\n") if line.strip()]
+    num_values = len(summary_lines)
+
+    # Try common column counts that divide evenly
+    for num_cols in [2, 3, 4, 5]:
+        if num_values % num_cols == 0:
+            num_rows = num_values // num_cols
+
+            # Verify summary values match extracted cells
+            if set(summary_lines) & set(cell_values):
+                # Build grid directly from summary (row-major order)
+                grid = {}
+                for i, val in enumerate(summary_lines):
+                    row = i // num_cols
+                    col = i % num_cols
+                    grid[(row, col)] = val
+                return Table(rows=num_rows, columns=num_cols, cells=grid)
+
+    # Final fallback: single column
+    return Table(rows=len(cell_values), columns=1,
+                 cells={(i, 0): v for i, v in enumerate(cell_values)})
+```
+
+**Example**: A table with headers "Feature" and "Shortcut":
+
+```
+ZSUMMARY: "Feature\nShortcut\nBold\nCmd + B\nItalic\nCmd + I\nHeading\nShift + Cmd + H\n"
+
+8 values ÷ 2 columns = 4 rows
+
+Result:
+| Feature | Shortcut       |
+|---------|----------------|
+| Bold    | Cmd + B        |
+| Italic  | Cmd + I        |
+| Heading | Shift + Cmd + H|
 ```
 
 ## CRDT Noise Filtering
@@ -303,9 +351,10 @@ Wire types 3, 4, 6, 7 are deprecated/reserved and should be skipped.
 
 1. ~~**Column ordering**: Parse `crColumns` ordered set to determine correct display order~~ **SOLVED**: Use ZSUMMARY column for display order
 2. ~~**Row ordering**: Parse `crRows` ordered set for row display order~~ **SOLVED**: Use ZSUMMARY cell values to match and reorder rows
-3. **Empty cells**: Handle cells with no content (currently show as empty string)
-4. **Rich text**: Parse formatting within cells (bold, italic, links)
-5. **Merged cells**: Investigate if Apple Notes supports cell merging
+3. ~~**Dimension inference for unknown headers**: Tables with non-standard headers failed to parse correctly~~ **SOLVED**: Use ZSUMMARY to infer dimensions when header detection fails
+4. **Empty cells**: Handle cells with no content (currently show as empty string)
+5. **Rich text**: Parse formatting within cells (bold, italic, links)
+6. **Merged cells**: Investigate if Apple Notes supports cell merging
 
 ## References
 
