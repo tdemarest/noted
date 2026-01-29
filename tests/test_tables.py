@@ -1,8 +1,9 @@
 """Tests for noted.tables."""
 
+import gzip
 from typing import Any
 
-from noted.tables import decode_fields, decode_varint
+from noted.tables import decode_fields, decode_varint, parse_table_data
 
 
 def test_decode_varint_single_byte() -> None:
@@ -33,3 +34,16 @@ def test_decode_fields_simple() -> None:
     assert fields[1][0][1] == 150  # (wire_type, value)
     assert 2 in fields
     assert fields[2][0][1] == b"test"
+
+
+def test_parse_table_data_returns_none_for_invalid() -> None:
+    """Test that invalid data returns None."""
+    result = parse_table_data(b"not gzip data")
+    assert result is None
+
+
+def test_parse_table_data_returns_none_for_empty() -> None:
+    """Test that empty gzip returns None."""
+    empty_gzip = gzip.compress(b"")
+    result = parse_table_data(empty_gzip)
+    assert result is None
