@@ -8,6 +8,7 @@ dependencies = [
     "rich>=13",
     "loguru>=0.7",
     "betterproto>=2.0.0b6",
+    "py7zr>=0.20.0",
 ]
 
 [project.scripts]
