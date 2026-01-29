@@ -1,5 +1,6 @@
 """Tests for noted.db."""
 
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from noted.db import (
     _source_db_path,
     apple_timestamp_to_datetime,
     clear_cache,
+    get_connection,
 )
 
 
@@ -63,3 +65,24 @@ def test_clear_cache_no_dir(tmp_path: Path) -> None:
     with patch("noted.db.CACHE_DIR", nonexistent):
         # Should not raise
         clear_cache()
+
+
+def test_get_connection(tmp_path: Path) -> None:
+    """Test getting a read-only database connection."""
+    # Create a minimal SQLite database for testing
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("CREATE TABLE test (id INTEGER)")
+    conn.close()
+
+    with patch("noted.db.ensure_cached_db", return_value=test_db):
+        conn = get_connection()
+        assert conn is not None
+        # Verify it's read-only by trying to write
+        try:
+            conn.execute("INSERT INTO test VALUES (1)")
+            conn.commit()
+            assert False, "Should have raised error for read-only"
+        except sqlite3.OperationalError as e:
+            assert "readonly" in str(e).lower()
+        conn.close()

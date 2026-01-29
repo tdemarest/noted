@@ -4,10 +4,13 @@ Handles copying, caching, and querying the Notes SQLite database.
 """
 
 import shutil
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
+
+from noted.models import Note, NoteSummary
 
 # Apple Notes database location
 NOTES_DIR = Path.home() / "Library/Group Containers/group.com.apple.notes"
@@ -110,3 +113,122 @@ def clear_cache() -> None:
             cached.unlink()
             logger.debug(f"Deleted {filename}")
     logger.info("Cache cleared")
+
+
+def get_connection() -> sqlite3.Connection:
+    """Get a read-only connection to the cached database.
+
+    Ensures database is cached first, then opens in read-only mode.
+
+    Returns:
+        SQLite connection in read-only mode.
+    """
+    db_path = ensure_cached_db()
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def list_notes(
+    conn: sqlite3.Connection,
+    folder: str | None = None,
+    limit: int | None = None,
+) -> list[Note]:
+    """Query notes from the database.
+
+    Args:
+        conn: Database connection.
+        folder: Filter by folder name, or None for all.
+        limit: Maximum number of notes to return, or None for all.
+
+    Returns:
+        List of Note objects sorted by modification date (newest first).
+    """
+    query = """
+        SELECT
+            n.Z_PK as id,
+            n.ZTITLE1 as title,
+            f.ZTITLE2 as folder,
+            n.ZCREATIONDATE as created,
+            n.ZMODIFICATIONDATE as modified
+        FROM ZICCLOUDSYNCINGOBJECT n
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+        WHERE n.ZTITLE1 IS NOT NULL
+          AND n.ZMARKEDFORDELETION != 1
+    """
+    params: list[str | int] = []
+
+    if folder is not None:
+        query += " AND f.ZTITLE2 = ?"
+        params.append(folder)
+
+    query += " ORDER BY n.ZMODIFICATIONDATE DESC"
+
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+
+    cursor = conn.execute(query, params)
+    notes = []
+    for row in cursor:
+        notes.append(
+            Note(
+                id=row["id"],
+                title=row["title"] or "(Untitled)",
+                folder=row["folder"],
+                created=apple_timestamp_to_datetime(row["created"]),
+                modified=apple_timestamp_to_datetime(row["modified"]),
+            )
+        )
+    return notes
+
+
+def count_notes(conn: sqlite3.Connection) -> int:
+    """Count total notes in database.
+
+    Args:
+        conn: Database connection.
+
+    Returns:
+        Total number of notes.
+    """
+    query = """
+        SELECT COUNT(*)
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL
+          AND ZMARKEDFORDELETION != 1
+    """
+    cursor = conn.execute(query)
+    return cursor.fetchone()[0]
+
+
+def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummary:
+    """Get aggregate statistics about notes.
+
+    Args:
+        conn: Database connection.
+        by_folder: Whether to include per-folder counts.
+
+    Returns:
+        NoteSummary with total count and optional folder breakdown.
+    """
+    total = count_notes(conn)
+    folder_counts: dict[str, int] = {}
+
+    if by_folder:
+        query = """
+            SELECT
+                COALESCE(f.ZTITLE2, '(No Folder)') as folder,
+                COUNT(*) as count
+            FROM ZICCLOUDSYNCINGOBJECT n
+            LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+            WHERE n.ZTITLE1 IS NOT NULL
+              AND n.ZMARKEDFORDELETION != 1
+            GROUP BY f.ZTITLE2
+            ORDER BY count DESC
+        """
+        cursor = conn.execute(query)
+        for row in cursor:
+            folder_counts[row["folder"]] = row["count"]
+
+    return NoteSummary(total_count=total, folder_counts=folder_counts)
