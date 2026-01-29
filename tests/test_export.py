@@ -378,6 +378,7 @@ def test_export_all_notes(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
+            ZPARENT INTEGER,
             ZCREATIONDATE REAL,
             ZMODIFICATIONDATE REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0,

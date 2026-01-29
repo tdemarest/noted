@@ -424,6 +424,7 @@ def test_get_all_notes_includes_deleted(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
+            ZPARENT INTEGER,
             ZCREATIONDATE REAL,
             ZMODIFICATIONDATE REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
@@ -474,6 +475,7 @@ def test_get_all_notes_with_folder_filter(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
+            ZPARENT INTEGER,
             ZCREATIONDATE REAL,
             ZMODIFICATIONDATE REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
@@ -528,6 +530,7 @@ def test_get_folders(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
+            ZPARENT INTEGER,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
         )
     """)

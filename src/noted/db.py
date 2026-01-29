@@ -22,11 +22,13 @@ class FolderInfo:
         name: Folder name.
         identifier: Folder UUID.
         note_count: Number of notes in folder.
+        path: Full path from root (e.g., "Hobbies/Photography/Landscape Photos").
     """
 
     name: str
     identifier: str
     note_count: int
+    path: str = ""
 
 
 # Apple Notes database location
@@ -406,25 +408,31 @@ def get_all_notes(
     folder: str | None = None,
     include_deleted: bool = True,
 ) -> list[Note]:
-    """Fetch all notes from the database.
+    """Fetch all notes from the database with full folder paths.
 
     Unlike list_notes(), this function can include deleted notes
-    and is intended for full export operations.
+    and is intended for full export operations. Returns full folder
+    paths (e.g., "Hobbies/Photography/Landscape Photos") instead
+    of just the immediate folder name.
 
     Args:
         conn: Database connection.
-        folder: Filter by folder name, or None for all folders.
+        folder: Filter by folder name (matches anywhere in path), or None for all.
         include_deleted: If True, include notes marked for deletion.
 
     Returns:
-        List of Note objects sorted by folder then modification date.
+        List of Note objects sorted by folder path then modification date.
     """
+    # Get folder paths lookup first
+    folder_paths = get_folder_paths(conn)
+
     query = """
         SELECT
             n.Z_PK as id,
             n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
-            f.ZTITLE2 as folder,
+            n.ZFOLDER as folder_id,
+            f.ZTITLE2 as folder_name,
             n.ZCREATIONDATE as created,
             n.ZMODIFICATIONDATE as modified,
             n.ZMARKEDFORDELETION as deleted
@@ -437,44 +445,113 @@ def get_all_notes(
     if not include_deleted:
         query += " AND (n.ZMARKEDFORDELETION IS NULL OR n.ZMARKEDFORDELETION != 1)"
 
-    if folder is not None:
-        query += " AND f.ZTITLE2 = ?"
-        params.append(folder)
-
     query += " ORDER BY f.ZTITLE2, n.ZMODIFICATIONDATE DESC"
 
     cursor = conn.execute(query, params)
     notes = []
     for row in cursor:
         # For deleted notes, show "Recently Deleted" as folder
-        folder_name = row["folder"]
         if row["deleted"] and row["deleted"] == 1:
-            folder_name = "Recently Deleted"
+            folder_path = "Recently Deleted"
+        elif row["folder_id"]:
+            # Use full folder path from lookup
+            folder_path = folder_paths.get(row["folder_id"], row["folder_name"])
+        else:
+            folder_path = row["folder_name"]
+
+        # Apply folder filter (matches if filter appears anywhere in path)
+        if folder is not None and folder.lower() not in (folder_path or "").lower():
+            continue
 
         notes.append(
             Note(
                 id=row["id"],
                 identifier=row["identifier"] or "",
                 title=row["title"] or "(Untitled)",
-                folder=folder_name,
+                folder=folder_path,
                 created=apple_timestamp_to_datetime(row["created"]),
                 modified=apple_timestamp_to_datetime(row["modified"]),
             )
         )
-    return notes
+
+    # Sort by folder path for proper hierarchy grouping
+    return sorted(notes, key=lambda n: (n.folder or "", n.modified or datetime.min), reverse=False)
 
 
-def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
-    """Get all folders with their note counts.
+def get_folder_paths(conn: sqlite3.Connection) -> dict[int, str]:
+    """Build a lookup table of folder Z_PK to full path.
+
+    Handles nested folder hierarchy by following ZPARENT chain.
+    For example: "Hobbies/Photography/Landscape Photos"
 
     Args:
         conn: Database connection.
 
     Returns:
-        List of FolderInfo objects sorted by name.
+        Dictionary mapping folder Z_PK to full path string.
     """
+    # Get all folders with their parent info
     query = """
         SELECT
+            Z_PK as id,
+            ZTITLE2 as name,
+            ZPARENT as parent_id
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE2 IS NOT NULL
+    """
+    cursor = conn.execute(query)
+
+    # Build lookup tables
+    folder_names: dict[int, str] = {}
+    folder_parents: dict[int, int | None] = {}
+
+    for row in cursor:
+        folder_id = row["id"]
+        folder_names[folder_id] = row["name"]
+        folder_parents[folder_id] = row["parent_id"]
+
+    # Build full paths by following parent chain
+    folder_paths: dict[int, str] = {}
+
+    def build_path(folder_id: int) -> str:
+        if folder_id in folder_paths:
+            return folder_paths[folder_id]
+
+        name = folder_names.get(folder_id, "")
+        parent_id = folder_parents.get(folder_id)
+
+        if parent_id is None or parent_id not in folder_names:
+            # Root folder
+            folder_paths[folder_id] = name
+        else:
+            # Has parent - recursively build parent path
+            parent_path = build_path(parent_id)
+            folder_paths[folder_id] = f"{parent_path}/{name}"
+
+        return folder_paths[folder_id]
+
+    # Build paths for all folders
+    for folder_id in folder_names:
+        build_path(folder_id)
+
+    return folder_paths
+
+
+def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
+    """Get all folders with their note counts and full paths.
+
+    Args:
+        conn: Database connection.
+
+    Returns:
+        List of FolderInfo objects sorted by path.
+    """
+    # Get folder paths first
+    folder_paths = get_folder_paths(conn)
+
+    query = """
+        SELECT
+            f.Z_PK as id,
             f.ZTITLE2 as name,
             f.ZIDENTIFIER as identifier,
             COUNT(n.Z_PK) as note_count
@@ -486,14 +563,17 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
         ORDER BY f.ZTITLE2
     """
     cursor = conn.execute(query)
-    return [
+    folders = [
         FolderInfo(
             name=row["name"],
             identifier=row["identifier"] or "",
             note_count=row["note_count"],
+            path=folder_paths.get(row["id"], row["name"]),
         )
         for row in cursor
     ]
+    # Sort by full path for proper hierarchy ordering
+    return sorted(folders, key=lambda f: f.path.lower())
 
 
 def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, str]:
