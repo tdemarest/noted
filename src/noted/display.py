@@ -103,11 +103,30 @@ def display_note_view(note: Note, content: NoteContent) -> None:
     console.print(panel)
     console.print()
 
-    # Print body text
+    # Build attachment lookup for inline rendering
+    table_lookup: dict[str, Table] = {}
+    if content.attachments:
+        for att in content.attachments:
+            if att.table is not None:
+                table_lookup[att.identifier] = att.table
+
+    # Print body text with inline tables
     if content.text:
-        console.print(content.text)
+        _render_text_with_tables(content.text, table_lookup)
     else:
         console.print("[dim]No content[/dim]")
+
+
+def _render_text_with_tables(text: str, table_lookup: dict[str, Table]) -> None:
+    """Render text, replacing [Table] markers with actual tables.
+
+    Args:
+        text: Note text with [Table] markers.
+        table_lookup: Mapping of identifier to parsed Table.
+    """
+    # For now, just print the text - tables show as [Table] marker
+    # TODO: Parse markers and render inline tables
+    console.print(text)
 
 
 def table_to_rich(table: Table) -> RichTable:

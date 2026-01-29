@@ -3,7 +3,7 @@
 import typer
 from loguru import logger
 
-from noted import db, display, protobuf
+from noted import db, display, protobuf, tables
 
 app = typer.Typer(
     name="noted",
@@ -104,10 +104,21 @@ def view(
 
         # Get attachment names for display
         attachment_names = db.get_attachment_names(conn, note_id)
+
+        # Parse content
+        content = protobuf.parse_note_data(raw_data, attachment_names)
+
+        # Parse table attachments
+        if content.attachments:
+            for attachment in content.attachments:
+                if attachment.type_uti == "com.apple.notes.table":
+                    table_data = db.get_table_data(conn, attachment.identifier)
+                    if table_data:
+                        attachment.table = tables.parse_table_data(table_data)
+
         conn.close()
 
-        # Parse and display
-        content = protobuf.parse_note_data(raw_data, attachment_names)
+        # Display
         display.display_note_view(note, content)
 
     except FileNotFoundError:
