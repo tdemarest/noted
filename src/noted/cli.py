@@ -106,8 +106,25 @@ def view(
         "-o",
         help="Export to file (extension auto-selected based on format).",
     ),
+    attachments_flag: bool = typer.Option(
+        False,
+        "--attachments",
+        "-a",
+        help="Export attachments alongside note file.",
+    ),
+    zip_archive: bool = typer.Option(
+        False,
+        "--zip",
+        "-z",
+        help="Compress output as 7zip archive (requires --attachments).",
+    ),
 ) -> None:
     """View the full content of a note."""
+    # Validate options
+    if zip_archive and not attachments_flag:
+        display.display_error("--zip requires --attachments")
+        raise typer.Exit(code=1)
+
     try:
         conn = db.get_connection()
 
@@ -151,8 +168,6 @@ def view(
                         table_data, summary = result
                         attachment.table = tables.parse_table_data(table_data, summary)
 
-        conn.close()
-
         # Determine output format and get content
         if json_output or json_styled:
             output = display.get_note_json(note, content, include_styling=json_styled)
@@ -167,20 +182,82 @@ def view(
             output = None  # Rich text display handled separately
             ext = ".txt"
 
-        # Export to file or display
-        if export:
-            # Add extension if not provided
-            export_path = export if export.suffix else export.with_suffix(ext)
-            if output is not None:
-                export_path.write_text(output, encoding="utf-8")
+        # Handle attachments export
+        if attachments_flag:
+            from collections import Counter
+
+            from noted import attachments as att_module
+
+            # Determine base path
+            if export:
+                base_path = export.with_suffix("")
             else:
-                # For rich text, export as plain text
-                export_path.write_text(content.text or "", encoding="utf-8")
-            display.display_success(f"Exported to {export_path}")
-        elif output is not None:
-            print(output)
+                base_path = Path.cwd() / att_module.sanitize_filename(note.title)
+
+            # Ensure we have markdown output for export (default if none specified)
+            if output is None:
+                output = display.get_note_markdown(note, content)
+                ext = ".md"
+
+            # Write note file
+            note_path = base_path.with_suffix(ext)
+            note_path.write_text(output, encoding="utf-8")
+
+            # Export attachments
+            export_result = att_module.AttachmentExportResult(
+                exported=[], skipped=[], manifest_path=None, attachments_dir=None
+            )
+            if content.attachments:
+                export_result = att_module.export_attachments(
+                    conn=conn,
+                    attachments=content.attachments,
+                    output_dir=base_path.parent,
+                    base_name=base_path.name,
+                    note_id=note_id,
+                    note_title=note.title,
+                )
+
+            conn.close()
+
+            # Create archive if requested
+            if zip_archive:
+                archive_path = att_module.create_archive(
+                    base_path, note_path, export_result.attachments_dir
+                )
+                display.display_success(f"Created archive: {archive_path}")
+            else:
+                display.display_success(f"Exported to {note_path}")
+
+            # Report attachment results
+            if export_result.exported:
+                display.display_success(f"Exported {len(export_result.exported)} attachments")
+            if export_result.skipped:
+                # Summarize skipped by type
+                type_counts = Counter(
+                    protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in export_result.skipped
+                )
+                summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
+                display.display_warning(
+                    f"Skipped {len(export_result.skipped)} non-exportable: {summary}"
+                )
+
         else:
-            display.display_note_view(note, content)
+            conn.close()
+
+            # Export to file or display
+            if export:
+                # Add extension if not provided
+                export_path = export if export.suffix else export.with_suffix(ext)
+                if output is not None:
+                    export_path.write_text(output, encoding="utf-8")
+                else:
+                    # For rich text, export as plain text
+                    export_path.write_text(content.text or "", encoding="utf-8")
+                display.display_success(f"Exported to {export_path}")
+            elif output is not None:
+                print(output)
+            else:
+                display.display_note_view(note, content)
 
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")

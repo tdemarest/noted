@@ -2,6 +2,7 @@
 
 import gzip
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -132,3 +133,41 @@ def test_view_command_locked() -> None:
 
     assert result.exit_code == 1
     assert "locked" in result.output.lower()
+
+
+def test_view_zip_without_attachments() -> None:
+    """Test that --zip without --attachments shows error."""
+    result = runner.invoke(app, ["view", "42", "--zip"])
+    assert result.exit_code == 1
+    assert "requires" in result.output.lower() or "attachments" in result.output.lower()
+
+
+def test_view_attachments_flag_exports(tmp_path: Path) -> None:
+    """Test --attachments flag triggers export."""
+    mock_note = Note(
+        id=42,
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf with no attachments
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.Path.cwd", return_value=tmp_path),
+    ):
+        result = runner.invoke(app, ["view", "42", "--attachments"])
+
+    assert result.exit_code == 0
+    # Should create note file in tmp_path
+    note_files = list(tmp_path.glob("*.md")) + list(tmp_path.glob("*.txt"))
+    assert len(note_files) >= 1 or "Exported" in result.output
