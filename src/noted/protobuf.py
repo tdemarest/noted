@@ -11,6 +11,25 @@ import betterproto
 
 from noted.models import NoteContent
 
+# Gzip magic bytes
+GZIP_MAGIC = b"\x1f\x8b"
+
+
+def is_note_locked(data: bytes | None) -> bool:
+    """Check if note data is encrypted (locked).
+
+    Locked notes don't have gzip-compressed data.
+
+    Args:
+        data: Raw bytes from ZICNOTEDATA.ZDATA.
+
+    Returns:
+        True if the note appears to be locked/encrypted.
+    """
+    if not data or len(data) < 2:
+        return False
+    return data[:2] != GZIP_MAGIC
+
 
 @dataclass
 class Note(betterproto.Message):

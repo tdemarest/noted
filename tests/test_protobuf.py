@@ -4,7 +4,7 @@ import gzip
 
 import betterproto
 
-from noted.protobuf import NoteStoreProto, parse_note_data
+from noted.protobuf import NoteStoreProto, is_note_locked, parse_note_data
 
 
 def test_notestoreproto_structure() -> None:
@@ -46,3 +46,23 @@ def test_parse_note_data_empty_text() -> None:
 
     result = parse_note_data(compressed)
     assert result.text == ""
+
+
+def test_is_note_locked_gzip() -> None:
+    """Test that gzip data is not locked."""
+    # Valid gzip magic bytes
+    data = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03test"
+    assert is_note_locked(data) is False
+
+
+def test_is_note_locked_encrypted() -> None:
+    """Test that non-gzip data is considered locked."""
+    # Random bytes (not gzip)
+    data = b"\x00\x01\x02\x03\x04\x05"
+    assert is_note_locked(data) is True
+
+
+def test_is_note_locked_empty() -> None:
+    """Test that empty data is not locked (just missing)."""
+    assert is_note_locked(b"") is False
+    assert is_note_locked(None) is False
