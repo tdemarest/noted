@@ -34,3 +34,14 @@ class NoteSummary:
 
     total_count: int
     folder_counts: dict[str, int]
+
+
+@dataclass
+class NoteContent:
+    """Parsed content of an Apple Note.
+
+    Attributes:
+        text: The plain text content extracted from protobuf.
+    """
+
+    text: str

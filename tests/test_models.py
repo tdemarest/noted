@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from noted.models import Note, NoteSummary
+from noted.models import Note, NoteContent, NoteSummary
 
 
 def test_note_creation() -> None:
@@ -49,3 +49,15 @@ def test_note_summary_empty_folders() -> None:
     summary = NoteSummary(total_count=0, folder_counts={})
     assert summary.total_count == 0
     assert summary.folder_counts == {}
+
+
+def test_note_content_creation() -> None:
+    """Test NoteContent dataclass creation."""
+    content = NoteContent(text="Hello, world!")
+    assert content.text == "Hello, world!"
+
+
+def test_note_content_empty() -> None:
+    """Test NoteContent with empty text."""
+    content = NoteContent(text="")
+    assert content.text == ""
