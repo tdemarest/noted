@@ -7,6 +7,8 @@ with master index and optional 7zip compression.
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from noted.models import Note
+
 
 @dataclass
 class ExportOptions:
@@ -98,3 +100,50 @@ class FullExportResult:
     folders: list[str]
     notes: list[NoteExportResult] = field(default_factory=list)
     errors: list[ExportError] = field(default_factory=list)
+
+
+def generate_locked_placeholder(note: Note) -> str:
+    """Generate markdown content for a locked note placeholder.
+
+    Args:
+        note: The locked note's metadata.
+
+    Returns:
+        Markdown content explaining the note is locked.
+    """
+    return f"""# {note.title}
+
+> **This note is locked and cannot be exported.**
+>
+> To export this note, unlock it in Apple Notes and run the export again.
+
+---
+*Note ID: {note.id}*
+*Identifier: {note.identifier}*
+*Folder: {note.folder or "(No Folder)"}*
+"""
+
+
+def make_unique_folder_name(
+    folder_name: str,
+    identifier: str,
+    used_names: set[str],
+) -> str:
+    """Generate a unique folder name, adding UUID suffix if needed.
+
+    Args:
+        folder_name: Desired folder name.
+        identifier: Note UUID for suffix if conflict.
+        used_names: Set of already-used names (modified in place).
+
+    Returns:
+        Unique folder name (original or with UUID suffix).
+    """
+    if folder_name not in used_names:
+        used_names.add(folder_name)
+        return folder_name
+
+    # Add UUID suffix
+    unique = f"{folder_name}_{identifier[:6]}"
+    used_names.add(unique)
+    return unique
