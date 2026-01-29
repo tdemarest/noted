@@ -1,6 +1,6 @@
 """Tests for noted.attachments."""
 
-from noted.attachments import AttachmentExportResult, ExportedAttachment
+from noted.attachments import AttachmentExportResult, ExportedAttachment, uti_to_extension
 
 
 def test_exported_attachment_exported() -> None:
@@ -47,3 +47,30 @@ def test_attachment_export_result() -> None:
     )
     assert len(result.exported) == 1
     assert len(result.skipped) == 1
+
+
+def test_uti_to_extension_jpeg() -> None:
+    """Test UTI to extension for JPEG images."""
+    assert uti_to_extension("public.jpeg") == ".jpg"
+
+
+def test_uti_to_extension_png() -> None:
+    """Test UTI to extension for PNG images."""
+    assert uti_to_extension("public.png") == ".png"
+
+
+def test_uti_to_extension_pdf() -> None:
+    """Test UTI to extension for PDF documents."""
+    assert uti_to_extension("com.adobe.pdf") == ".pdf"
+    assert uti_to_extension("public.pdf") == ".pdf"
+
+
+def test_uti_to_extension_unknown() -> None:
+    """Test UTI to extension for unknown types returns .bin."""
+    assert uti_to_extension("com.unknown.type") == ".bin"
+
+
+def test_uti_to_extension_drawing() -> None:
+    """Test UTI to extension for Apple drawings."""
+    assert uti_to_extension("com.apple.drawing") == ".png"
+    assert uti_to_extension("com.apple.drawing.2") == ".png"

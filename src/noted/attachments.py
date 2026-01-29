@@ -42,3 +42,31 @@ class AttachmentExportResult:
     skipped: list[ExportedAttachment]
     manifest_path: Path | None
     attachments_dir: Path | None
+
+
+# UTI to file extension mapping
+UTI_EXTENSION_MAP: dict[str, str] = {
+    "public.jpeg": ".jpg",
+    "public.png": ".png",
+    "public.heic": ".heic",
+    "public.gif": ".gif",
+    "public.tiff": ".tiff",
+    "com.compuserve.gif": ".gif",
+    "com.adobe.pdf": ".pdf",
+    "public.pdf": ".pdf",
+    "com.apple.drawing": ".png",
+    "com.apple.drawing.2": ".png",
+}
+
+
+def uti_to_extension(uti: str) -> str:
+    """Convert UTI to file extension.
+
+    Args:
+        uti: Uniform Type Identifier (e.g., 'public.jpeg').
+
+    Returns:
+        File extension with leading dot (e.g., '.jpg').
+        Returns '.bin' for unknown types.
+    """
+    return UTI_EXTENSION_MAP.get(uti, ".bin")
