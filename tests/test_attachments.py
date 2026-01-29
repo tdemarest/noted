@@ -1,8 +1,12 @@
 """Tests for noted.attachments."""
 
+import json
+from pathlib import Path
+
 from noted.attachments import (
     AttachmentExportResult,
     ExportedAttachment,
+    generate_manifest,
     get_skip_reason,
     make_unique_filename,
     sanitize_filename,
@@ -159,3 +163,44 @@ def test_get_skip_reason_exportable() -> None:
     assert get_skip_reason("public.jpeg") is None
     assert get_skip_reason("public.png") is None
     assert get_skip_reason("com.adobe.pdf") is None
+
+
+def test_generate_manifest(tmp_path: Path) -> None:
+    """Test manifest generation with exported and skipped attachments."""
+    exported = [
+        ExportedAttachment("uuid-1", "photo.jpg", "public.jpeg", True, None),
+        ExportedAttachment("uuid-2", "doc.pdf", "com.adobe.pdf", True, None),
+    ]
+    skipped = [
+        ExportedAttachment("uuid-3", None, "com.apple.notes.table", False, "Rendered inline"),
+    ]
+
+    manifest_path = tmp_path / "manifest.json"
+    generate_manifest(
+        manifest_path,
+        note_id=42,
+        note_title="Test Note",
+        exported=exported,
+        skipped=skipped,
+    )
+
+    assert manifest_path.exists()
+    data = json.loads(manifest_path.read_text())
+
+    assert data["note_id"] == 42
+    assert data["note_title"] == "Test Note"
+    assert "exported_at" in data
+    assert len(data["attachments"]) == 3
+
+    # Check exported attachment
+    att1 = data["attachments"][0]
+    assert att1["identifier"] == "uuid-1"
+    assert att1["filename"] == "photo.jpg"
+    assert att1["exported"] is True
+
+    # Check skipped attachment
+    att3 = data["attachments"][2]
+    assert att3["identifier"] == "uuid-3"
+    assert att3["filename"] is None
+    assert att3["exported"] is False
+    assert att3["skip_reason"] == "Rendered inline"

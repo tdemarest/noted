@@ -4,8 +4,10 @@ Handles extracting attachments from notes and exporting them to disk,
 with optional 7zip compression.
 """
 
+import json
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -158,3 +160,51 @@ def get_skip_reason(type_uti: str) -> str | None:
         Reason string if attachment should be skipped, None if exportable.
     """
     return NON_EXPORTABLE_UTIS.get(type_uti)
+
+
+def generate_manifest(
+    manifest_path: Path,
+    note_id: int,
+    note_title: str,
+    exported: list[ExportedAttachment],
+    skipped: list[ExportedAttachment],
+) -> None:
+    """Generate manifest.json for exported attachments.
+
+    Args:
+        manifest_path: Path to write manifest.json.
+        note_id: The note's database ID.
+        note_title: The note's title.
+        exported: List of successfully exported attachments.
+        skipped: List of skipped attachments.
+    """
+    # Combine exported and skipped, maintaining order
+    all_attachments = []
+    for att in exported:
+        all_attachments.append(
+            {
+                "identifier": att.identifier,
+                "filename": att.filename,
+                "type_uti": att.type_uti,
+                "exported": att.exported,
+            }
+        )
+    for att in skipped:
+        all_attachments.append(
+            {
+                "identifier": att.identifier,
+                "filename": att.filename,
+                "type_uti": att.type_uti,
+                "exported": att.exported,
+                "skip_reason": att.skip_reason,
+            }
+        )
+
+    manifest = {
+        "note_id": note_id,
+        "note_title": note_title,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "attachments": all_attachments,
+    }
+
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
