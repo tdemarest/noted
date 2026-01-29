@@ -236,6 +236,83 @@ def display_warning(message: str) -> None:
     console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
 
 
+def display_export_success(folder: str | None, title: str, attachment_count: int = 0) -> None:
+    """Display verbose export success message with rich formatting.
+
+    Args:
+        folder: Note folder name (or None for no folder).
+        title: Note title.
+        attachment_count: Number of attachments exported.
+    """
+    folder_display = folder or "(No Folder)"
+    att_info = f" [dim]({attachment_count} attachments)[/dim]" if attachment_count else ""
+    console.print(
+        f"  [bold green]✓[/bold green] [cyan]{folder_display}[/cyan]/"
+        f"[bold]{title}[/bold]{att_info}"
+    )
+
+
+def display_export_locked(folder: str | None, title: str) -> None:
+    """Display verbose export locked note message with rich formatting.
+
+    Args:
+        folder: Note folder name (or None for no folder).
+        title: Note title.
+    """
+    folder_display = folder or "(No Folder)"
+    console.print(
+        f"  [bold yellow]⚠[/bold yellow] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
+        f"[yellow](locked)[/yellow]"
+    )
+
+
+def display_export_failed(folder: str | None, title: str, error: str | None) -> None:
+    """Display verbose export failure message with rich formatting.
+
+    Args:
+        folder: Note folder name (or None for no folder).
+        title: Note title.
+        error: Error message describing the failure.
+    """
+    folder_display = folder or "(No Folder)"
+    error_msg = error or "Unknown error"
+    console.print(
+        f"  [bold red]✗[/bold red] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
+        f"[red](failed: {error_msg})[/red]"
+    )
+
+
+def display_export_issues_summary(
+    locked_notes: list[tuple[str | None, str]],
+    failed_notes: list[tuple[str | None, str, str | None]],
+) -> None:
+    """Display summary of locked and failed notes after export.
+
+    Args:
+        locked_notes: List of (folder, title) tuples for locked notes.
+        failed_notes: List of (folder, title, error) tuples for failed notes.
+    """
+    if locked_notes:
+        console.print()
+        console.print("[bold yellow]Locked notes:[/bold yellow]")
+        for folder, title in locked_notes:
+            folder_display = folder or "(No Folder)"
+            console.print(
+                f"  [yellow]⚠[/yellow] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold]"
+            )
+
+    if failed_notes:
+        console.print()
+        console.print("[bold red]Failed notes:[/bold red]")
+        for folder, title, error in failed_notes:
+            folder_display = folder or "(No Folder)"
+            error_msg = error or "Unknown error"
+            console.print(
+                f"  [red]✗[/red] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
+                f"[dim]({error_msg})[/dim]"
+            )
+
+
 def _format_file_size(size_bytes: int | float) -> str:
     """Format a file size in bytes to human-readable string.
 

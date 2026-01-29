@@ -115,7 +115,6 @@ noted/
   - The SHM file is: NoteStore.sqlite-shm
   - The WAL file is: NoteStore.sqlite-wal
 - Make copies of the sqlite files and never operate on the live versions
-  - Do somnthing like:
 
 ```python
 shutil.copy('NoteStore.sqlite', '/tmp/notes_copy.sqlite')

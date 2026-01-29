@@ -420,16 +420,13 @@ def export_all_notes(
                 exported_count += 1
                 total_attachments += result.attachment_count
                 if options.verbose:
-                    att_info = (
-                        f" ({result.attachment_count} attachments)"
-                        if result.attachment_count
-                        else ""
+                    display.display_export_success(
+                        note.folder, note.title, result.attachment_count
                     )
-                    print(f"  \u2713 {note.folder or '(No Folder)'}/{note.title}{att_info}")
             elif result.status == "locked":
                 locked_count += 1
                 if options.verbose:
-                    print(f"  \u26a0 {note.folder or '(No Folder)'}/{note.title} (locked)")
+                    display.display_export_locked(note.folder, note.title)
             else:
                 failed_count += 1
                 errors.append(
@@ -442,10 +439,7 @@ def export_all_notes(
                     )
                 )
                 if options.verbose:
-                    print(
-                        f"  \u2717 {note.folder or '(No Folder)'}/{note.title} "
-                        f"(failed: {result.error})"
-                    )
+                    display.display_export_failed(note.folder, note.title, result.error)
 
             progress.update(task, advance=1)
 

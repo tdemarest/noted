@@ -427,6 +427,18 @@ def export(
             if result.archive_path:
                 display.display_success(f"Created archive: {result.archive_path}")
 
+            # Show detailed list of locked and failed notes
+            if result.locked_count > 0 or result.failed_count > 0:
+                locked_notes = [
+                    (n.folder, n.title) for n in result.notes if n.status == "locked"
+                ]
+                failed_notes = [
+                    (n.folder, n.title, n.error)
+                    for n in result.notes
+                    if n.status == "failed"
+                ]
+                display.display_export_issues_summary(locked_notes, failed_notes)
+
         else:
             # Single note export
             assert note_ref is not None  # Validated above

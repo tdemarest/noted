@@ -82,3 +82,6 @@ docker-compose.yaml
 # Input and Output files
 output/
 input/
+
+# Claude settings
+.claude/
