@@ -176,3 +176,32 @@ def table_to_rich(table: Table) -> RichTable:
         rich_table.add_row(*row_data)
 
     return rich_table
+
+
+def table_to_markdown(table: Table) -> str:
+    """Convert Table data to markdown string.
+
+    Args:
+        table: Parsed table data.
+
+    Returns:
+        Markdown-formatted table string.
+    """
+    if table.rows == 0 or table.columns == 0:
+        return ""
+
+    lines = []
+
+    # Header row (first row of data)
+    header = [table.get_cell(0, col) or " " for col in range(table.columns)]
+    lines.append("| " + " | ".join(header) + " |")
+
+    # Separator
+    lines.append("| " + " | ".join(["---"] * table.columns) + " |")
+
+    # Data rows
+    for row in range(1, table.rows):
+        cells = [table.get_cell(row, col) or " " for col in range(table.columns)]
+        lines.append("| " + " | ".join(cells) + " |")
+
+    return "\n".join(lines)

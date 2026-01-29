@@ -6,6 +6,7 @@ from noted.display import (
     display_count,
     display_note_view,
     display_notes_table,
+    table_to_markdown,
     table_to_rich,
 )
 from noted.models import Note, NoteContent, NoteSummary, Table
@@ -96,3 +97,16 @@ def test_table_to_rich_empty_cells() -> None:
     table = Table(rows=2, columns=2, cells={(0, 0): "Only"})
     rich_table = table_to_rich(table)
     assert len(rich_table.columns) == 2
+
+
+def test_table_to_markdown() -> None:
+    """Test converting Table to markdown string."""
+    table = Table(
+        rows=2,
+        columns=2,
+        cells={(0, 0): "A", (0, 1): "B", (1, 0): "C", (1, 1): "D"},
+    )
+    md = table_to_markdown(table)
+    assert "| A | B |" in md
+    assert "| C | D |" in md
+    assert "---" in md  # Header separator
