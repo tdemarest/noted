@@ -16,6 +16,7 @@ from noted.attachments import (
     get_skip_reason,
     make_unique_filename,
     sanitize_filename,
+    sanitize_path,
     uti_to_extension,
 )
 from noted.models import Attachment, Note
@@ -100,8 +101,8 @@ def test_sanitize_filename_simple() -> None:
 
 
 def test_sanitize_filename_spaces() -> None:
-    """Test sanitize_filename replaces spaces with underscores."""
-    assert sanitize_filename("my photo.jpg") == "my_photo.jpg"
+    """Test sanitize_filename preserves spaces."""
+    assert sanitize_filename("my photo.jpg") == "my photo.jpg"
 
 
 def test_sanitize_filename_special_chars() -> None:
@@ -111,7 +112,7 @@ def test_sanitize_filename_special_chars() -> None:
 
 def test_sanitize_filename_unicode() -> None:
     """Test sanitize_filename handles unicode."""
-    assert sanitize_filename("café_photo.jpg") == "café_photo.jpg"
+    assert sanitize_filename("café photo.jpg") == "café photo.jpg"
 
 
 def test_sanitize_filename_empty() -> None:
@@ -122,6 +123,42 @@ def test_sanitize_filename_empty() -> None:
 def test_sanitize_filename_only_bad_chars() -> None:
     """Test sanitize_filename with only bad characters."""
     assert sanitize_filename("***") == "attachment"
+
+
+def test_sanitize_path_simple() -> None:
+    """Test sanitize_path with single folder."""
+    result = sanitize_path("Work")
+    assert result == Path("Work")
+
+
+def test_sanitize_path_nested() -> None:
+    """Test sanitize_path with nested folders."""
+    result = sanitize_path("Adeia/Adeia Meetings/Vendor Meetings")
+    assert result == Path("Adeia/Adeia Meetings/Vendor Meetings")
+
+
+def test_sanitize_path_with_spaces() -> None:
+    """Test sanitize_path preserves spaces in each component."""
+    result = sanitize_path("My Folder/Sub Folder")
+    assert result == Path("My Folder/Sub Folder")
+
+
+def test_sanitize_path_with_special_chars() -> None:
+    """Test sanitize_path removes special chars from each component."""
+    result = sanitize_path("Work:/Projects?/Notes*")
+    assert result == Path("Work/Projects/Notes")
+
+
+def test_sanitize_path_empty() -> None:
+    """Test sanitize_path with empty string."""
+    result = sanitize_path("")
+    assert result == Path("(No Folder)")
+
+
+def test_sanitize_path_none_like() -> None:
+    """Test sanitize_path handles None-like input."""
+    result = sanitize_path("")
+    assert result == Path("(No Folder)")
 
 
 def test_make_unique_filename_no_conflict() -> None:

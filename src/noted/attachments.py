@@ -85,8 +85,8 @@ def uti_to_extension(uti: str) -> str:
 def sanitize_filename(name: str) -> str:
     """Sanitize a filename for safe filesystem use.
 
-    Removes or replaces characters that are invalid in filenames
-    on common operating systems (Windows, macOS, Linux).
+    Removes characters that are invalid in filenames on common
+    operating systems (Windows, macOS, Linux). Preserves spaces.
 
     Args:
         name: Original filename.
@@ -97,12 +97,9 @@ def sanitize_filename(name: str) -> str:
     if not name:
         return "attachment"
 
-    # Replace spaces with underscores
-    result = name.replace(" ", "_")
-
     # Remove characters invalid on Windows/macOS/Linux
     # Invalid: / \ : * ? " < > |
-    result = re.sub(r'[/\\:*?"<>|]', "", result)
+    result = re.sub(r'[/\\:*?"<>|]', "", name)
 
     # Remove control characters
     result = re.sub(r"[\x00-\x1f\x7f]", "", result)
@@ -110,6 +107,37 @@ def sanitize_filename(name: str) -> str:
     # If nothing left, use default
     if not result or result.strip(".") == "":
         return "attachment"
+
+    return result
+
+
+def sanitize_path(folder_path: str) -> Path:
+    """Sanitize a folder path for safe filesystem use.
+
+    Handles nested paths like "Adeia/Adeia Meetings/Vendor Meetings"
+    by sanitizing each path component separately while preserving
+    the hierarchy structure. Spaces are preserved.
+
+    Args:
+        folder_path: Folder path with "/" separators.
+
+    Returns:
+        Path object with each component sanitized.
+    """
+    if not folder_path:
+        return Path("(No Folder)")
+
+    # Split by "/" and sanitize each component
+    components = folder_path.split("/")
+    sanitized = [sanitize_filename(c) for c in components if c]
+
+    # Build path from components
+    if not sanitized:
+        return Path("(No Folder)")
+
+    result = Path(sanitized[0])
+    for component in sanitized[1:]:
+        result = result / component
 
     return result
 

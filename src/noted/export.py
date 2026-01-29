@@ -238,9 +238,9 @@ def export_single_note(
     if used_folder_names is None:
         used_folder_names = set()
 
-    # Determine folder path
+    # Determine folder path (handles nested paths like "Adeia/Meetings/Vendor")
     folder_name = note.folder or "(No Folder)"
-    folder_path = output_dir / attachments.sanitize_filename(folder_name)
+    folder_path = output_dir / attachments.sanitize_path(folder_name)
 
     # Create note folder with unique name
     note_folder_name = attachments.sanitize_filename(note.title)
