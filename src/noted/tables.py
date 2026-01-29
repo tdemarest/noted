@@ -207,8 +207,58 @@ def _extract_strings_recursive(
     return strings
 
 
+def _extract_cells_from_field10(obj: dict[int, list[tuple[int, Any]]]) -> list[str]:
+    """Extract cell text values from field 10 entries.
+
+    Apple Notes tables store cell content in field 10 of table_object entries.
+    The text is in subfield 2 of each field 10 structure.
+
+    Args:
+        obj: Decoded MergableDataObject fields.
+
+    Returns:
+        List of cell text values in storage order.
+    """
+    cells: list[str] = []
+
+    if 3 not in obj:
+        return cells
+
+    for _, entry_data in obj[3]:
+        if not isinstance(entry_data, bytes):
+            continue
+
+        entry = decode_fields(entry_data)
+        if 10 not in entry:
+            continue
+
+        # Field 10 contains the cell structure
+        f10_data = entry[10][0][1]
+        if not isinstance(f10_data, bytes):
+            continue
+
+        f10 = decode_fields(f10_data)
+        if 2 not in f10:
+            continue
+
+        # Field 2 contains the text
+        text_data = f10[2][0][1]
+        if isinstance(text_data, bytes):
+            try:
+                text = text_data.decode("utf-8")
+                cells.append(text)
+            except UnicodeDecodeError:
+                pass
+
+    return cells
+
+
 def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
     """Parse MergableDataObject to extract table structure.
+
+    Apple Notes tables store cells column-by-column, with each column's
+    header as the last cell in that column's range. This function extracts
+    cells and reconstructs the grid.
 
     Args:
         obj_data: Raw bytes of the MergableDataObject.
@@ -218,74 +268,83 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
     """
     obj = decode_fields(obj_data)
 
-    # Field 4 = key_item (property names like "crRows", "crColumns", "cellColumns")
-    key_items: list[str] = []
-    if 4 in obj:
-        for _, val in obj[4]:
-            if isinstance(val, bytes):
-                try:
-                    key_items.append(val.decode("utf-8"))
-                except UnicodeDecodeError:
-                    key_items.append("")
+    # Extract cells from field 10 entries
+    cell_values = _extract_cells_from_field10(obj)
 
-    # Find index for crColumns (used for grid detection)
-    cr_cols_idx = -1
-    for i, key in enumerate(key_items):
-        if key == "crColumns":
-            cr_cols_idx = i
-            break
+    if not cell_values:
+        # Fallback to recursive string extraction
+        cell_values = _extract_strings_recursive(obj_data)
+        # Deduplicate
+        seen: set[str] = set()
+        unique: list[str] = []
+        for s in cell_values:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        cell_values = unique
 
-    # Field 6 = uuid_item (row/column identifiers)
-    uuid_items: list[bytes] = []
-    if 6 in obj:
-        for _, val in obj[6]:
-            if isinstance(val, bytes):
-                uuid_items.append(val)
-
-    # Extract strings using recursive method
-    cell_strings = _extract_strings_recursive(obj_data)
-
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique_strings: list[str] = []
-    for s in cell_strings:
-        if s not in seen:
-            seen.add(s)
-            unique_strings.append(s)
-
-    if not unique_strings:
-        # Fallback to simple extraction
-        unique_strings = _extract_strings_from_data(obj_data)
-
-    if not unique_strings:
+    if not cell_values:
         return None
 
-    # Try to detect grid structure by looking for patterns
-    # Heuristic: if we have row/column UUIDs, use their count
-    num_cols = 1
-    if cr_cols_idx >= 0 and 3 in obj:
-        # Count unique column references
-        # For now, use a simple heuristic based on UUID count
-        if len(uuid_items) >= 4:
-            # Likely multi-column - estimate based on string count patterns
-            # Try common column counts
-            for try_cols in [4, 3, 2, 5, 6]:
-                if len(unique_strings) % try_cols == 0 and len(unique_strings) >= try_cols:
-                    num_cols = try_cols
-                    break
+    # Detect column count by finding header positions
+    # In Apple Notes CRDT tables, headers are at the END of each column segment
+    # Find headers by looking for known header patterns in exact positions
 
-    num_rows = len(unique_strings) // num_cols if num_cols > 0 else len(unique_strings)
-    if num_rows * num_cols < len(unique_strings):
-        num_rows += 1
+    # Find potential headers - only use exact matches from common set
+    common_headers = {
+        "Date", "Miles", "Cost", "Performed By", "Service Desc",
+        "Name", "Description", "Price", "Quantity", "Total", "Qty",
+        "Item", "Amount", "Status", "Notes", "Category", "Type",
+    }
 
-    # Arrange strings in grid (row-major order)
+    header_positions: list[tuple[int, str]] = []
+    for i, val in enumerate(cell_values):
+        # Only exact matches with common headers
+        if val.strip() in common_headers:
+            header_positions.append((i, val.strip()))
+
+    # If we found headers, they mark the end of each column's data
+    if len(header_positions) >= 2:
+        num_cols = len(header_positions)
+        # Calculate rows per column (cells before first header + 1 for header)
+        cells_per_col = header_positions[0][0] + 1
+        num_rows = cells_per_col
+
+        # Build grid: columns are stored sequentially
+        # Each column has (num_rows - 1) data cells followed by 1 header
+        grid_cells: dict[tuple[int, int], str] = {}
+
+        # Map storage columns to display columns based on header order
+        # Headers are at positions 0*cells_per_col + (cells_per_col-1), etc.
+        storage_col_headers: list[str] = []
+        for col_idx in range(num_cols):
+            header_pos = (col_idx + 1) * cells_per_col - 1
+            if header_pos < len(cell_values):
+                storage_col_headers.append(cell_values[header_pos])
+
+        # For each storage column, extract cells
+        for storage_col in range(num_cols):
+            col_start = storage_col * cells_per_col
+            col_end = col_start + cells_per_col
+
+            # Header goes in row 0
+            header_idx = col_end - 1
+            if header_idx < len(cell_values):
+                grid_cells[(0, storage_col)] = cell_values[header_idx]
+
+            # Data cells go in rows 1+
+            for data_idx in range(col_start, min(col_end - 1, len(cell_values))):
+                row = data_idx - col_start + 1
+                grid_cells[(row, storage_col)] = cell_values[data_idx]
+
+        return Table(rows=num_rows, columns=num_cols, cells=grid_cells)
+
+    # Fallback: single column
     cells: dict[tuple[int, int], str] = {}
-    for i, s in enumerate(unique_strings):
-        row = i // num_cols
-        col = i % num_cols
-        cells[(row, col)] = s
+    for i, val in enumerate(cell_values):
+        cells[(i, 0)] = val
 
-    return Table(rows=num_rows, columns=num_cols, cells=cells)
+    return Table(rows=len(cell_values), columns=1, cells=cells)
 
 
 def _fallback_string_extraction(data: bytes) -> Table | None:
