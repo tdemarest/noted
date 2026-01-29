@@ -362,3 +362,99 @@ def test_export_single_note_no_content(tmp_path: Path) -> None:
     assert result.status == "failed"
     assert result.error is not None
     assert "no content" in result.error.lower()
+
+
+def test_export_all_notes(tmp_path: Path) -> None:
+    """Test full export of all notes."""
+    from noted.export import ExportOptions, export_all_notes
+
+    # Create test database with multiple notes
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZCREATIONDATE REAL,
+            ZMODIFICATIONDATE REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZNOTE INTEGER,
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT,
+            ZMERGEABLEDATA1 BLOB,
+            ZSUMMARY TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE ZICNOTEDATA (
+            Z_PK INTEGER PRIMARY KEY,
+            ZNOTE INTEGER,
+            ZDATA BLOB
+        )
+    """)
+
+    # Create folder
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE2)
+           VALUES (?, ?, ?)""",
+        (1, "folder-1", "Work"),
+    )
+
+    # Create notes with minimal content
+    note_proto = b"\x12\x05Hello"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (2, "note-1", "Note One", 1, 0),
+    )
+    conn.execute(
+        "INSERT INTO ZICNOTEDATA (Z_PK, ZNOTE, ZDATA) VALUES (?, ?, ?)",
+        (1, 2, compressed),
+    )
+
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (3, "note-2", "Note Two", 1, 0),
+    )
+    conn.execute(
+        "INSERT INTO ZICNOTEDATA (Z_PK, ZNOTE, ZDATA) VALUES (?, ?, ?)",
+        (2, 3, compressed),
+    )
+
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    output_dir = tmp_path / "notes_export"
+    options = ExportOptions(output_dir=output_dir)
+
+    result = export_all_notes(conn, options)
+
+    conn.close()
+
+    assert result.total_notes == 2
+    assert result.exported_count == 2
+    assert result.failed_count == 0
+    assert output_dir.exists()
+    assert (output_dir / "index.json").exists()
+    assert (output_dir / "Work").exists()
+
+    # Check index.json content
+    index_data = json.loads((output_dir / "index.json").read_text())
+    assert index_data["statistics"]["total_notes"] == 2
+    assert len(index_data["notes"]) == 2

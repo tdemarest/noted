@@ -346,3 +346,178 @@ def export_single_note(
             attachment_count=0,
             error=str(e),
         )
+
+
+def export_all_notes(
+    conn: sqlite3.Connection,
+    options: ExportOptions,
+) -> FullExportResult:
+    """Export all notes to structured folder hierarchy.
+
+    Args:
+        conn: Database connection.
+        options: Export configuration.
+
+    Returns:
+        FullExportResult with statistics and note list.
+    """
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+    )
+
+    # Get all notes
+    notes = db.get_all_notes(
+        conn,
+        folder=options.folder_filter,
+        include_deleted=options.include_deleted,
+    )
+
+    # Get folder info
+    folders_raw = db.get_folders(conn)
+    folder_names = [f.name for f in folders_raw]
+
+    # Create output directory
+    options.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Track results
+    note_results: list[NoteExportResult] = []
+    errors: list[ExportError] = []
+    total_attachments = 0
+    exported_count = 0
+    locked_count = 0
+    failed_count = 0
+
+    # Track used folder names per parent folder for deduplication
+    used_names_by_folder: dict[str, set[str]] = {}
+
+    # Export notes with progress bar
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        disable=options.verbose,
+    ) as progress:
+        task = progress.add_task("Exporting notes...", total=len(notes))
+
+        for note in notes:
+            # Get or create used names set for this folder
+            folder_key = note.folder or "(No Folder)"
+            if folder_key not in used_names_by_folder:
+                used_names_by_folder[folder_key] = set()
+
+            result = export_single_note(
+                conn, note, options.output_dir, used_names_by_folder[folder_key]
+            )
+            note_results.append(result)
+
+            if result.status == "success":
+                exported_count += 1
+                total_attachments += result.attachment_count
+                if options.verbose:
+                    att_info = (
+                        f" ({result.attachment_count} attachments)"
+                        if result.attachment_count
+                        else ""
+                    )
+                    print(f"  \u2713 {note.folder or '(No Folder)'}/{note.title}{att_info}")
+            elif result.status == "locked":
+                locked_count += 1
+                if options.verbose:
+                    print(f"  \u26a0 {note.folder or '(No Folder)'}/{note.title} (locked)")
+            else:
+                failed_count += 1
+                errors.append(
+                    ExportError(
+                        note_id=note.id,
+                        identifier=note.identifier,
+                        title=note.title,
+                        folder=note.folder,
+                        error=result.error or "Unknown error",
+                    )
+                )
+                if options.verbose:
+                    print(
+                        f"  \u2717 {note.folder or '(No Folder)'}/{note.title} "
+                        f"(failed: {result.error})"
+                    )
+
+            progress.update(task, advance=1)
+
+    # Build folder info for index
+    folder_info: list[dict[str, str | int]] = []
+    for folder_name in folder_names:
+        folder_path = attachments.sanitize_filename(folder_name)
+        count = sum(1 for r in note_results if r.folder == folder_name)
+        if count > 0:
+            folder_info.append(
+                {
+                    "name": folder_name,
+                    "path": f"{folder_path}/",
+                    "note_count": count,
+                }
+            )
+
+    # Add (No Folder) if any notes have no folder
+    no_folder_count = sum(1 for r in note_results if r.folder is None)
+    if no_folder_count > 0:
+        folder_info.append(
+            {
+                "name": "(No Folder)",
+                "path": "(No_Folder)/",
+                "note_count": no_folder_count,
+            }
+        )
+
+    # Build result
+    full_result = FullExportResult(
+        output_dir=options.output_dir,
+        archive_path=None,
+        total_notes=len(notes),
+        exported_count=exported_count,
+        locked_count=locked_count,
+        failed_count=failed_count,
+        total_attachments=total_attachments,
+        folders=folder_names,
+        notes=note_results,
+        errors=errors,
+    )
+
+    # Generate master index
+    index_path = options.output_dir / "index.json"
+    generate_master_index(index_path, full_result, folder_info)
+
+    # Create archive if requested
+    if options.create_archive:
+        archive_path = create_full_archive(options.output_dir)
+        full_result.archive_path = archive_path
+
+    return full_result
+
+
+def create_full_archive(output_dir: Path) -> Path:
+    """Create 7zip archive of the entire export.
+
+    Unlike single-note archive, this keeps the original files.
+
+    Args:
+        output_dir: Directory to archive.
+
+    Returns:
+        Path to created .7z archive.
+    """
+    import py7zr
+
+    archive_path = output_dir.with_suffix(".7z")
+
+    with py7zr.SevenZipFile(archive_path, "w") as archive:
+        for file in output_dir.rglob("*"):
+            if file.is_file():
+                arcname = str(file.relative_to(output_dir.parent))
+                archive.write(file, arcname)
+
+    return archive_path
