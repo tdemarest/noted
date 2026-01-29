@@ -37,6 +37,28 @@ class NoteSummary:
 
 
 @dataclass
+class Table:
+    """Parsed table from Apple Notes.
+
+    Stores data in a neutral format that can be rendered
+    as Rich, markdown, ASCII, or HTML.
+
+    Attributes:
+        rows: Number of rows in the table.
+        columns: Number of columns in the table.
+        cells: Mapping of (row, col) to cell text content.
+    """
+
+    rows: int
+    columns: int
+    cells: dict[tuple[int, int], str]
+
+    def get_cell(self, row: int, col: int) -> str:
+        """Get cell content, empty string if not present."""
+        return self.cells.get((row, col), "")
+
+
+@dataclass
 class Attachment:
     """Represents an embedded attachment in a note.
 
@@ -44,11 +66,13 @@ class Attachment:
         identifier: Unique identifier (UUID) for the attachment.
         type_uti: Uniform Type Identifier (e.g., 'public.jpeg').
         title: Display name/filename of the attachment, if known.
+        table: Parsed table data, if this is a table attachment.
     """
 
     identifier: str
     type_uti: str
     title: str | None = None
+    table: Table | None = None
 
 
 @dataclass
