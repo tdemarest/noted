@@ -95,6 +95,15 @@ def display_success(message: str) -> None:
     console.print(f"[bold green]Success:[/bold green] {message}")
 
 
+def display_warning(message: str) -> None:
+    """Display warning message.
+
+    Args:
+        message: Warning message to display.
+    """
+    console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
+
+
 def display_note_view(note: Note, content: NoteContent) -> None:
     """Display a note's full content.
 
@@ -656,11 +665,7 @@ def note_to_markdown(
             heading_text = heading_text.rstrip()
 
             # Skip first title if requested (to avoid duplicating note title)
-            if (
-                para_type == ParagraphType.TITLE
-                and skip_first_title
-                and not skipped_first_title
-            ):
+            if para_type == ParagraphType.TITLE and skip_first_title and not skipped_first_title:
                 skipped_first_title = True
                 continue
 
@@ -673,9 +678,7 @@ def note_to_markdown(
             continue
 
         # Regular text with styling - aggregate consecutive runs with same style
-        has_styling = style and (
-            style.bold or style.italic or style.strikethrough
-        )
+        has_styling = style and (style.bold or style.italic or style.strikethrough)
         # Only apply styling to non-whitespace content
         has_content = text.strip() != ""
 
@@ -788,9 +791,7 @@ def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) 
     return result
 
 
-def get_note_json(
-    note: Note, content: NoteContent, include_styling: bool = False
-) -> str:
+def get_note_json(note: Note, content: NoteContent, include_styling: bool = False) -> str:
     """Get a note as JSON string.
 
     Args:
@@ -877,9 +878,7 @@ def get_note_json(
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-def display_note_json(
-    note: Note, content: NoteContent, include_styling: bool = False
-) -> None:
+def display_note_json(note: Note, content: NoteContent, include_styling: bool = False) -> None:
     """Output a note as JSON.
 
     Args:
@@ -922,7 +921,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
     modified_str = note.modified.strftime("%Y-%m-%d %H:%M") if note.modified else "-"
 
     # Build full HTML document with Adeia branding
-    html_doc = f'''<!DOCTYPE html>
+    html_doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1135,7 +1134,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         </footer>
     </div>
 </body>
-</html>'''
+</html>"""
 
     return html_doc
 

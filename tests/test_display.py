@@ -1,11 +1,13 @@
 """Tests for noted.display."""
 
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 from noted.display import (
     display_count,
     display_note_view,
     display_notes_table,
+    display_warning,
     table_to_markdown,
     table_to_rich,
 )
@@ -110,3 +112,13 @@ def test_table_to_markdown() -> None:
     assert "| A | B |" in md
     assert "| C | D |" in md
     assert "---" in md  # Header separator
+
+
+def test_display_warning() -> None:
+    """Test warning message display."""
+    with patch("noted.display.console") as mock_console:
+        display_warning("Skipped 2 attachments")
+        mock_console.print.assert_called_once()
+        call_arg = mock_console.print.call_args[0][0]
+        assert "Warning" in call_arg or "warning" in call_arg.lower()
+        assert "Skipped 2 attachments" in call_arg
