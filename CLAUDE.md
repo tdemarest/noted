@@ -75,17 +75,33 @@ uv run noted view <id_or_uuid> --html
 # Export note to file (format auto-detected from flags)
 uv run noted view <id_or_uuid> --markdown -o ./my_note.md
 
-# Export note with attachments
-uv run noted view <id_or_uuid> --attachments
+# Export single note with attachments
+uv run noted export <id_or_uuid>
 # Creates: ./Note_Title.md and ./Note_Title_attachments/
-# Manifest includes both note_id and note_identifier (UUID)
 
-# Export note with attachments to specific path
-uv run noted view <id_or_uuid> -a -o ./backup/my_note
-
-# Export note and attachments as 7zip archive
-uv run noted view <id_or_uuid> --attachments --zip
+# Export single note as 7zip archive
+uv run noted export <id_or_uuid> --zip
 # Creates: ./Note_Title.7z
+
+# Export ALL notes with attachments
+uv run noted export --all
+# Creates: ./notes_export/ with folder structure mirroring Apple Notes
+
+# Export all notes with 7zip archive
+uv run noted export --all --zip
+# Creates: ./notes_export/ AND ./notes_export.7z
+
+# Export to custom directory
+uv run noted export --all -o ~/Backups/notes_2026-01-29
+
+# Export only notes from specific folder
+uv run noted export --all --folder "Work"
+
+# Export excluding deleted notes
+uv run noted export --all --exclude-deleted
+
+# Verbose export (show each note as it's exported)
+uv run noted export --all --verbose
 
 # Force refresh cached database
 uv run noted refresh
@@ -120,9 +136,10 @@ noted/
 ├── src/noted/
 │   ├── __init__.py         # Package version
 │   ├── attachments.py      # Attachment export, archive creation
-│   ├── cli.py              # Typer CLI commands (list, count, view, refresh)
+│   ├── cli.py              # Typer CLI commands (list, count, view, export, refresh)
 │   ├── db.py               # Database caching, connection, queries
 │   ├── display.py          # Rich terminal output formatting
+│   ├── export.py           # Full export functionality, master index
 │   ├── models.py           # Note, NoteSummary, Attachment dataclasses
 │   ├── protobuf.py         # Protobuf parsing for note content
 │   └── tables.py           # Apple Notes CRDT table parsing
@@ -131,6 +148,7 @@ noted/
 │   ├── test_cli.py         # CLI command tests
 │   ├── test_db.py          # Database function tests
 │   ├── test_display.py     # Display function tests
+│   ├── test_export.py      # Full export tests
 │   ├── test_integration.py # Integration tests
 │   ├── test_models.py      # Model tests
 │   ├── test_protobuf.py    # Protobuf parsing tests
