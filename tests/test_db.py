@@ -411,3 +411,156 @@ def test_get_attachment_data_no_media(tmp_path: Path) -> None:
     result = get_attachment_data(conn, "table-uuid")
     assert result is None
     conn.close()
+
+
+def test_get_all_notes_includes_deleted(tmp_path: Path) -> None:
+    """Test get_all_notes includes notes marked for deletion when requested."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZCREATIONDATE REAL,
+            ZMODIFICATIONDATE REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    # Regular note
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?)""",
+        (1, "uuid-1", "Active Note", 0),
+    )
+    # Deleted note
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?)""",
+        (2, "uuid-2", "Deleted Note", 1),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_all_notes
+
+    # Without deleted
+    notes = get_all_notes(conn, include_deleted=False)
+    assert len(notes) == 1
+    assert notes[0].title == "Active Note"
+
+    # With deleted
+    notes = get_all_notes(conn, include_deleted=True)
+    assert len(notes) == 2
+
+    conn.close()
+
+
+def test_get_all_notes_with_folder_filter(tmp_path: Path) -> None:
+    """Test get_all_notes filters by folder."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZCREATIONDATE REAL,
+            ZMODIFICATIONDATE REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    # Create folders
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE2) VALUES (?, ?)""",
+        (1, "Work"),
+    )
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE2) VALUES (?, ?)""",
+        (2, "Personal"),
+    )
+    # Create notes
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (3, "uuid-1", "Work Note", 1, 0),
+    )
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (4, "uuid-2", "Personal Note", 2, 0),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_all_notes
+
+    # Filter by Work folder
+    notes = get_all_notes(conn, folder="Work")
+    assert len(notes) == 1
+    assert notes[0].title == "Work Note"
+
+    conn.close()
+
+
+def test_get_folders(tmp_path: Path) -> None:
+    """Test get_folders returns folder names and note counts."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    # Folder
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTITLE2)
+           VALUES (?, ?, ?)""",
+        (1, "folder-1", "Work"),
+    )
+    # Notes in folder
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (2, "uuid-1", "Note 1", 1, 0),
+    )
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZMARKEDFORDELETION)
+           VALUES (?, ?, ?, ?, ?)""",
+        (3, "uuid-2", "Note 2", 1, 0),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_folders
+
+    folders = get_folders(conn)
+    assert len(folders) == 1
+    assert folders[0].name == "Work"
+    assert folders[0].note_count == 2
+
+    conn.close()

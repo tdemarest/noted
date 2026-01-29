@@ -5,12 +5,29 @@ Handles copying, caching, and querying the Notes SQLite database.
 
 import shutil
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
 
 from noted.models import Note, NoteSummary
+
+
+@dataclass
+class FolderInfo:
+    """Information about a notes folder.
+
+    Attributes:
+        name: Folder name.
+        identifier: Folder UUID.
+        note_count: Number of notes in folder.
+    """
+
+    name: str
+    identifier: str
+    note_count: int
+
 
 # Apple Notes database location
 NOTES_DIR = Path.home() / "Library/Group Containers/group.com.apple.notes"
@@ -382,6 +399,101 @@ def get_note(conn: sqlite3.Connection, note_ref: str) -> Note | None:
     except ValueError:
         # Not an integer, try as UUID
         return get_note_by_identifier(conn, note_ref)
+
+
+def get_all_notes(
+    conn: sqlite3.Connection,
+    folder: str | None = None,
+    include_deleted: bool = True,
+) -> list[Note]:
+    """Fetch all notes from the database.
+
+    Unlike list_notes(), this function can include deleted notes
+    and is intended for full export operations.
+
+    Args:
+        conn: Database connection.
+        folder: Filter by folder name, or None for all folders.
+        include_deleted: If True, include notes marked for deletion.
+
+    Returns:
+        List of Note objects sorted by folder then modification date.
+    """
+    query = """
+        SELECT
+            n.Z_PK as id,
+            n.ZIDENTIFIER as identifier,
+            n.ZTITLE1 as title,
+            f.ZTITLE2 as folder,
+            n.ZCREATIONDATE as created,
+            n.ZMODIFICATIONDATE as modified,
+            n.ZMARKEDFORDELETION as deleted
+        FROM ZICCLOUDSYNCINGOBJECT n
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+        WHERE n.ZTITLE1 IS NOT NULL
+    """
+    params: list[str | int] = []
+
+    if not include_deleted:
+        query += " AND (n.ZMARKEDFORDELETION IS NULL OR n.ZMARKEDFORDELETION != 1)"
+
+    if folder is not None:
+        query += " AND f.ZTITLE2 = ?"
+        params.append(folder)
+
+    query += " ORDER BY f.ZTITLE2, n.ZMODIFICATIONDATE DESC"
+
+    cursor = conn.execute(query, params)
+    notes = []
+    for row in cursor:
+        # For deleted notes, show "Recently Deleted" as folder
+        folder_name = row["folder"]
+        if row["deleted"] and row["deleted"] == 1:
+            folder_name = "Recently Deleted"
+
+        notes.append(
+            Note(
+                id=row["id"],
+                identifier=row["identifier"] or "",
+                title=row["title"] or "(Untitled)",
+                folder=folder_name,
+                created=apple_timestamp_to_datetime(row["created"]),
+                modified=apple_timestamp_to_datetime(row["modified"]),
+            )
+        )
+    return notes
+
+
+def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
+    """Get all folders with their note counts.
+
+    Args:
+        conn: Database connection.
+
+    Returns:
+        List of FolderInfo objects sorted by name.
+    """
+    query = """
+        SELECT
+            f.ZTITLE2 as name,
+            f.ZIDENTIFIER as identifier,
+            COUNT(n.Z_PK) as note_count
+        FROM ZICCLOUDSYNCINGOBJECT f
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
+            AND n.ZTITLE1 IS NOT NULL
+        WHERE f.ZTITLE2 IS NOT NULL
+        GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER
+        ORDER BY f.ZTITLE2
+    """
+    cursor = conn.execute(query)
+    return [
+        FolderInfo(
+            name=row["name"],
+            identifier=row["identifier"] or "",
+            note_count=row["note_count"],
+        )
+        for row in cursor
+    ]
 
 
 def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, str]:
