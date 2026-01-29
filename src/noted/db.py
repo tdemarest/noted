@@ -341,3 +341,30 @@ def get_table_data(conn: sqlite3.Connection, identifier: str) -> tuple[bytes, st
     if row is None:
         return None
     return (row["ZMERGEABLEDATA1"], row["ZSUMMARY"] or "")
+
+
+def get_attachment_data(
+    conn: sqlite3.Connection,
+    identifier: str,
+) -> tuple[bytes, str, str | None] | None:
+    """Fetch binary data for an attachment by identifier.
+
+    Args:
+        conn: Database connection.
+        identifier: The attachment's unique identifier (UUID).
+
+    Returns:
+        Tuple of (binary_data, type_uti, title), or None if not found
+        or attachment has no binary data.
+    """
+    query = """
+        SELECT ZDATA, ZTYPEUTI, ZTITLE
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZIDENTIFIER = ?
+          AND ZDATA IS NOT NULL
+    """
+    cursor = conn.execute(query, (identifier,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return (row["ZDATA"], row["ZTYPEUTI"], row["ZTITLE"])

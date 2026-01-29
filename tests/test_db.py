@@ -279,3 +279,99 @@ def test_get_table_data_not_found(tmp_path: Path) -> None:
     result = get_table_data(conn, "nonexistent")
     assert result is None
     conn.close()
+
+
+def test_get_attachment_data(tmp_path: Path) -> None:
+    """Test fetching attachment binary data by identifier."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZDATA BLOB
+        )
+    """)
+
+    test_data = b"\x89PNG\r\n\x1a\nfake_image_data"
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZDATA)
+           VALUES (?, ?, ?, ?, ?)""",
+        (1, "test-uuid-123", "public.png", "photo.png", test_data),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_attachment_data
+    result = get_attachment_data(conn, "test-uuid-123")
+    assert result is not None
+    assert result[0] == test_data
+    assert result[1] == "public.png"
+    assert result[2] == "photo.png"
+    conn.close()
+
+
+def test_get_attachment_data_not_found(tmp_path: Path) -> None:
+    """Test fetching attachment data for non-existent identifier."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZDATA BLOB
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_attachment_data
+    result = get_attachment_data(conn, "nonexistent")
+    assert result is None
+    conn.close()
+
+
+def test_get_attachment_data_no_binary(tmp_path: Path) -> None:
+    """Test that attachments without ZDATA return None."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZDATA BLOB
+        )
+    """)
+
+    # Insert attachment without binary data (like a table)
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZDATA)
+           VALUES (?, ?, ?, ?, ?)""",
+        (1, "table-uuid", "com.apple.notes.table", None, None),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    from noted.db import get_attachment_data
+    result = get_attachment_data(conn, "table-uuid")
+    assert result is None
+    conn.close()
