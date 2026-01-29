@@ -3,7 +3,7 @@
 import typer
 from loguru import logger
 
-from noted import db, display
+from noted import db, display, protobuf
 
 app = typer.Typer(
     name="noted",
@@ -71,6 +71,49 @@ def refresh() -> None:
     """Force refresh the cached database copy."""
     db.clear_cache()
     display.display_success("Cache cleared. Next command will use fresh data.")
+
+
+@app.command()
+def view(
+    note_id: int = typer.Argument(..., help="Note ID to view (from list command)."),
+) -> None:
+    """View the full content of a note."""
+    try:
+        conn = db.get_connection()
+
+        # Get note metadata
+        note = db.get_note_by_id(conn, note_id)
+        if note is None:
+            display.display_error(f"Note with ID {note_id} not found.")
+            conn.close()
+            raise typer.Exit(code=1)
+
+        # Get note content
+        raw_data = db.get_note_content(conn, note_id)
+        conn.close()
+
+        if raw_data is None:
+            display.display_error("Note has no content.")
+            raise typer.Exit(code=1)
+
+        # Check if locked
+        if protobuf.is_note_locked(raw_data):
+            display.display_error("Note is locked and cannot be read.")
+            raise typer.Exit(code=1)
+
+        # Parse and display
+        content = protobuf.parse_note_data(raw_data)
+        display.display_note_view(note, content)
+
+    except FileNotFoundError:
+        display.display_error("Apple Notes database not found.")
+        raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        logger.exception("Error viewing note")
+        display.display_error(str(e))
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

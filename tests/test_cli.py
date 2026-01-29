@@ -1,5 +1,6 @@
 """Tests for noted.cli."""
 
+import gzip
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -68,3 +69,66 @@ def test_refresh_command() -> None:
         result = runner.invoke(app, ["refresh"])
         assert result.exit_code == 0
         mock_clear.assert_called_once()
+
+
+def test_view_command_success() -> None:
+    """Test view command with valid note."""
+    mock_note = Note(
+        id=42,
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+    ):
+        result = runner.invoke(app, ["view", "42"])
+
+    assert result.exit_code == 0
+    assert "Test Note" in result.output
+    assert "Hello, world!" in result.output
+
+
+def test_view_command_not_found() -> None:
+    """Test view command with non-existent note."""
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=None),
+    ):
+        result = runner.invoke(app, ["view", "999"])
+
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+def test_view_command_locked() -> None:
+    """Test view command with locked note."""
+    mock_note = Note(
+        id=42,
+        title="Secret Note",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+    # Non-gzip data indicates locked
+    locked_data = b"\x00\x01\x02\x03"
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=locked_data),
+    ):
+        result = runner.invoke(app, ["view", "42"])
+
+    assert result.exit_code == 1
+    assert "locked" in result.output.lower()
