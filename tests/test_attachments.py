@@ -4,9 +4,12 @@ import json
 import sqlite3
 from pathlib import Path
 
+import py7zr
+
 from noted.attachments import (
     AttachmentExportResult,
     ExportedAttachment,
+    create_archive,
     export_attachments,
     generate_manifest,
     get_skip_reason,
@@ -340,3 +343,58 @@ def test_export_attachments_empty_list(tmp_path: Path) -> None:
     assert len(result.skipped) == 0
     assert result.attachments_dir is None
     assert result.manifest_path is None
+
+
+def test_create_archive(tmp_path: Path) -> None:
+    """Test creating 7zip archive from note and attachments."""
+    # Create note file
+    note_file = tmp_path / "TestNote.md"
+    note_file.write_text("# Test Note\n\nContent here.")
+
+    # Create attachments directory
+    att_dir = tmp_path / "TestNote_attachments"
+    att_dir.mkdir()
+    (att_dir / "photo.jpg").write_bytes(b"fake_image")
+    (att_dir / "manifest.json").write_text('{"note_id": 1}')
+
+    # Create archive
+    archive_path = create_archive(
+        base_path=tmp_path / "TestNote",
+        note_file=note_file,
+        attachments_dir=att_dir,
+    )
+
+    # Verify archive exists
+    assert archive_path.exists()
+    assert archive_path.suffix == ".7z"
+
+    # Verify contents
+    with py7zr.SevenZipFile(archive_path, "r") as archive:
+        names = archive.getnames()
+        assert "TestNote.md" in names
+        assert "TestNote_attachments/photo.jpg" in names
+        assert "TestNote_attachments/manifest.json" in names
+
+    # Verify originals cleaned up
+    assert not note_file.exists()
+    assert not att_dir.exists()
+
+
+def test_create_archive_no_attachments(tmp_path: Path) -> None:
+    """Test creating archive with note only, no attachments."""
+    note_file = tmp_path / "TestNote.md"
+    note_file.write_text("# Test Note")
+
+    archive_path = create_archive(
+        base_path=tmp_path / "TestNote",
+        note_file=note_file,
+        attachments_dir=None,
+    )
+
+    assert archive_path.exists()
+    with py7zr.SevenZipFile(archive_path, "r") as archive:
+        names = archive.getnames()
+        assert "TestNote.md" in names
+        assert len(names) == 1
+
+    assert not note_file.exists()

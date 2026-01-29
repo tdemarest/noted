@@ -6,10 +6,13 @@ with optional 7zip compression.
 
 import json
 import re
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+import py7zr
 
 from noted import db
 from noted.models import Attachment
@@ -326,3 +329,41 @@ def export_attachments(
         manifest_path=manifest_path,
         attachments_dir=attachments_dir,
     )
+
+
+def create_archive(
+    base_path: Path,
+    note_file: Path,
+    attachments_dir: Path | None,
+) -> Path:
+    """Create 7zip archive containing note and attachments.
+
+    After archiving, cleans up the original files.
+
+    Args:
+        base_path: Base path for archive (without extension).
+        note_file: Path to the exported note file.
+        attachments_dir: Path to attachments directory, or None if no attachments.
+
+    Returns:
+        Path to created .7z archive.
+    """
+    archive_path = base_path.with_suffix(".7z")
+
+    with py7zr.SevenZipFile(archive_path, "w") as archive:
+        # Add note file at root
+        archive.write(note_file, note_file.name)
+
+        # Add attachments directory if present
+        if attachments_dir and attachments_dir.exists():
+            for file in attachments_dir.rglob("*"):
+                if file.is_file():
+                    arcname = f"{attachments_dir.name}/{file.relative_to(attachments_dir)}"
+                    archive.write(file, arcname)
+
+    # Clean up temporary files after archiving
+    note_file.unlink()
+    if attachments_dir and attachments_dir.exists():
+        shutil.rmtree(attachments_dir)
+
+    return archive_path
