@@ -22,16 +22,20 @@ CACHE_DIR = Path.home() / ".cache/noted"
 DB_FILES = ["NoteStore.sqlite", "NoteStore.sqlite-shm", "NoteStore.sqlite-wal"]
 
 # Apple Core Data epoch: 2001-01-01 00:00:00 UTC
+# To convert to Unix timestamp: unix_ts = apple_ts + 978307200
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=UTC)
 
 
 def apple_timestamp_to_datetime(timestamp: float | None) -> datetime | None:
     """Convert Apple Core Data timestamp to datetime.
 
-    Apple timestamps are seconds since 2001-01-01 00:00:00 UTC.
+    Apple Core Data stores timestamps as seconds since 2001-01-01 00:00:00 UTC.
+    The offset from Unix epoch (1970-01-01) to Apple epoch (2001-01-01) is
+    978307200 seconds. This function uses datetime arithmetic instead of
+    the offset for clarity.
 
     Args:
-        timestamp: Apple timestamp in seconds, or None.
+        timestamp: Apple timestamp in seconds since 2001-01-01, or None.
 
     Returns:
         datetime in UTC, or None if input was None.
