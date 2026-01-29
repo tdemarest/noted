@@ -133,3 +133,28 @@ def make_unique_filename(
 
     used_names.add(unique)
     return unique
+
+
+# UTIs that don't have exportable binary data
+NON_EXPORTABLE_UTIS: dict[str, str] = {
+    "com.apple.notes.table": "Rendered inline in note content",
+    "com.apple.notes.gallery": "Gallery container, no single file",
+    "com.apple.notes.inlinetextattachment": "Inline text, no file data",
+    "com.apple.notes.inlinetextattachment.hashtag": "Hashtag, no file data",
+    "com.apple.notes.inlinetextattachment.mention": "Mention, no file data",
+    "public.url": "URL link, no file data",
+    "com.apple.mapkit.map-item": "Location data, no file data",
+    "public.vcard": "Contact data, no file data",
+}
+
+
+def get_skip_reason(type_uti: str) -> str | None:
+    """Get skip reason for non-exportable attachment types.
+
+    Args:
+        type_uti: Uniform Type Identifier.
+
+    Returns:
+        Reason string if attachment should be skipped, None if exportable.
+    """
+    return NON_EXPORTABLE_UTIS.get(type_uti)

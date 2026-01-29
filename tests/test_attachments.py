@@ -3,6 +3,7 @@
 from noted.attachments import (
     AttachmentExportResult,
     ExportedAttachment,
+    get_skip_reason,
     make_unique_filename,
     sanitize_filename,
     uti_to_extension,
@@ -133,3 +134,28 @@ def test_make_unique_filename_no_extension() -> None:
     used = {"README"}
     result = make_unique_filename("README", "xyz789", used)
     assert result == "README_xyz789"
+
+
+def test_get_skip_reason_table() -> None:
+    """Test skip reason for table attachments."""
+    reason = get_skip_reason("com.apple.notes.table")
+    assert reason == "Rendered inline in note content"
+
+
+def test_get_skip_reason_link() -> None:
+    """Test skip reason for URL links."""
+    reason = get_skip_reason("public.url")
+    assert reason == "URL link, no file data"
+
+
+def test_get_skip_reason_map() -> None:
+    """Test skip reason for map attachments."""
+    reason = get_skip_reason("com.apple.mapkit.map-item")
+    assert reason == "Location data, no file data"
+
+
+def test_get_skip_reason_exportable() -> None:
+    """Test skip reason is None for exportable types."""
+    assert get_skip_reason("public.jpeg") is None
+    assert get_skip_reason("public.png") is None
+    assert get_skip_reason("com.adobe.pdf") is None
