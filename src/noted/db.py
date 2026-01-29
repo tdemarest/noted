@@ -259,3 +259,39 @@ def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:
     if row is None:
         return None
     return row["ZDATA"]
+
+
+def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
+    """Fetch a single note by its ID.
+
+    Args:
+        conn: Database connection.
+        note_id: The Z_PK of the note.
+
+    Returns:
+        Note object, or None if not found.
+    """
+    query = """
+        SELECT
+            n.Z_PK as id,
+            n.ZTITLE1 as title,
+            f.ZTITLE2 as folder,
+            n.ZCREATIONDATE as created,
+            n.ZMODIFICATIONDATE as modified
+        FROM ZICCLOUDSYNCINGOBJECT n
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+        WHERE n.Z_PK = ?
+          AND n.ZTITLE1 IS NOT NULL
+          AND n.ZMARKEDFORDELETION != 1
+    """
+    cursor = conn.execute(query, (note_id,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return Note(
+        id=row["id"],
+        title=row["title"] or "(Untitled)",
+        folder=row["folder"],
+        created=apple_timestamp_to_datetime(row["created"]),
+        modified=apple_timestamp_to_datetime(row["modified"]),
+    )

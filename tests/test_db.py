@@ -11,6 +11,7 @@ from noted.db import (
     apple_timestamp_to_datetime,
     clear_cache,
     get_connection,
+    get_note_by_id,
     get_note_content,
 )
 
@@ -151,4 +152,70 @@ def test_get_note_content_not_found(tmp_path: Path) -> None:
 
     result = get_note_content(conn, 999)
     assert result is None
+    conn.close()
+
+
+def test_get_note_by_id(tmp_path: Path) -> None:
+    """Test fetching a single note by ID."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZCREATIONDATE REAL,
+            ZMODIFICATIONDATE REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+
+    # Insert folder and note
+    conn.execute("""
+        INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE2)
+        VALUES (1, 'Work')
+    """)
+    conn.execute("""
+        INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE)
+        VALUES (2, 'Test Note', 1, 758629800.0, 758629900.0)
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    note = get_note_by_id(conn, 2)
+    assert note is not None
+    assert note.id == 2
+    assert note.title == "Test Note"
+    assert note.folder == "Work"
+    conn.close()
+
+
+def test_get_note_by_id_not_found(tmp_path: Path) -> None:
+    """Test fetching non-existent note."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZCREATIONDATE REAL,
+            ZMODIFICATIONDATE REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    note = get_note_by_id(conn, 999)
+    assert note is None
     conn.close()
