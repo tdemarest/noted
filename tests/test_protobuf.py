@@ -66,3 +66,65 @@ def test_is_note_locked_empty() -> None:
     """Test that empty data is not locked (just missing)."""
     assert is_note_locked(b"") is False
     assert is_note_locked(None) is False
+
+
+def test_parse_note_replaces_attachment_placeholders() -> None:
+    """Test that U+FFFC attachment placeholders are replaced with markers."""
+    from noted.protobuf import _process_attachments
+
+    # Text with object replacement character
+    text = "Hello \ufffc world"
+
+    # AttributeRun: length=6 (for "Hello "), then length=1 with attachment_info, then length=6
+    # The attachment run covers the U+FFFC character
+    class MockAttachmentInfo:
+        attachment_identifier: str = "abc123"
+        type_uti: str = "public.jpeg"
+
+    class MockAttributeRun:
+        length: int
+        attachment_info: object
+
+        def __init__(self, length: int, attachment_info: object = None) -> None:
+            self.length = length
+            self.attachment_info = attachment_info
+
+    runs = [
+        MockAttributeRun(6, None),  # "Hello "
+        MockAttributeRun(1, MockAttachmentInfo()),  # U+FFFC -> [Image]
+        MockAttributeRun(6, None),  # " world"
+    ]
+
+    result = _process_attachments(text, runs)
+    assert "\ufffc" not in result
+    assert "[Image]" in result
+
+
+def test_parse_note_handles_multiple_attachments() -> None:
+    """Test handling multiple attachments in a note."""
+    from noted.protobuf import _process_attachments
+
+    # Two attachments
+    text = "A\ufffcB\ufffcC"
+
+    class MockAttachmentInfo:
+        def __init__(self, type_uti: str) -> None:
+            self.attachment_identifier = "id"
+            self.type_uti = type_uti
+
+    class MockAttributeRun:
+        def __init__(self, length: int, attachment_info: object = None) -> None:
+            self.length = length
+            self.attachment_info = attachment_info
+
+    runs = [
+        MockAttributeRun(1, None),  # "A"
+        MockAttributeRun(1, MockAttachmentInfo("public.png")),  # first U+FFFC
+        MockAttributeRun(1, None),  # "B"
+        MockAttributeRun(1, MockAttachmentInfo("com.adobe.pdf")),  # second U+FFFC
+        MockAttributeRun(1, None),  # "C"
+    ]
+
+    result = _process_attachments(text, runs)
+    assert result.count("[") == 2  # Two attachment markers
+    assert "\ufffc" not in result
