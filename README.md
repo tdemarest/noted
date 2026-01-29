@@ -62,7 +62,8 @@
 
 ## About The Project
 
-Apple Notes is a powerful note-taking app, but accessing your notes programmatically has always been challenging. **noted** provides direct read access to your Apple Notes database, allowing you to:
+Apple Notes is closed system and accessing your notes programmatically is challenging. **noted** provides direct
+read access to your Apple Notes database, allowing you to:
 
 - **Search and browse** your entire notes library from the command line
 - **Export notes** in multiple formats (Markdown, JSON, HTML)
@@ -70,6 +71,7 @@ Apple Notes is a powerful note-taking app, but accessing your notes programmatic
 - **Parse complex content** including tables stored in Apple's CRDT format
 
 The tool works by safely copying and reading the Apple Notes SQLite database — it never modifies your original notes.
+It aims to be relatively fast for large-ish Notes databases (2000+ with heavy attachment usage).
 
 ## CAVEAT EMPTOR
 
@@ -80,6 +82,7 @@ exactly what I need it to and maybe it saves someone some hours or tokens if the
 ### Features
 
 - **Rich terminal output** with syntax highlighting and formatted tables
+- **Full export** with folder structure intact 
 - **Multiple export formats**: Markdown, JSON, HTML
 - **Attachment extraction** with manifest generation
 - **7zip archive creation** good for notes that have lots of attachments
@@ -140,7 +143,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Usage
 
-The CLI automatically caches a copy of the Apple Notes database to `~/.cache/noted/` and refreshes it when the source database changes.
+The CLI automatically caches a copy of the Apple Notes database to `~/.cache/noted/` and refreshes it when the source database changes. It's best to close Apple Notes when using **noted** otherwise the workign database and cache
+will be refreshed frequently defeating the purpose of the cache.
 
 ### List Notes
 
@@ -335,7 +339,7 @@ uv run noted refresh
 - [x] Full export with nested folder hierarchy
 - [x] Progress bars for export operations
 - [x] Locked note detection and placeholders
-- [ ] Search notes by content
+- [x] Search notes by content
 - [ ] PDF export
 
 

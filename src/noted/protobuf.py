@@ -100,11 +100,13 @@ def _process_attachments(
             title = names.get(identifier)
 
             # Create Attachment object
-            attachments.append(Attachment(
-                identifier=identifier,
-                type_uti=uti,
-                title=title,
-            ))
+            attachments.append(
+                Attachment(
+                    identifier=identifier,
+                    type_uti=uti,
+                    title=title,
+                )
+            )
 
             # Replace U+FFFC with attachment marker
             type_name = _uti_to_type(uti)
@@ -353,13 +355,15 @@ def _extract_formatting(
                     except UnicodeDecodeError:
                         pass
 
-            formatted_runs.append(FormattedRun(
-                text=run_text,
-                length=length,
-                text_style=text_style,
-                paragraph_style=para_style,
-                link=link,
-            ))
+            formatted_runs.append(
+                FormattedRun(
+                    text=run_text,
+                    length=length,
+                    text_style=text_style,
+                    paragraph_style=para_style,
+                    link=link,
+                )
+            )
 
     except Exception:
         # If formatting extraction fails, return empty list

@@ -46,99 +46,33 @@ betterproto:
 # Install dependencies
 uv sync
 
-# List notes (most recently modified first)
+# List notes
 uv run noted list
-
-# List notes with filters
 uv run noted list --folder "Work" --limit 10
 
-# Count all notes
-uv run noted count
+# Search titles/folders
+uv run noted list --search "meeting"
 
-# Count notes by folder
-uv run noted count --by-folder
+# Deep search (FTS5 full-text search in content)
+uv run noted list -s "budget" --deep
+uv run noted list -s 'title:meeting AND content:deadline' --deep
 
-# View a note (rich terminal output)
-# Accepts either row ID or UUID
+# View a note
 uv run noted view 42
-uv run noted view "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+uv run noted view 42 --markdown
 
-# View note as markdown
-uv run noted view <id_or_uuid> --markdown
-
-# View note as JSON
-uv run noted view <id_or_uuid> --json
-
-# View note as HTML
-uv run noted view <id_or_uuid> --html
-
-# Export note to file (format auto-detected from flags)
-uv run noted view <id_or_uuid> --markdown -o ./my_note.md
-
-# Export single note with attachments
-uv run noted export <id_or_uuid>
-# Creates: ./Note Title.md and ./Note Title_attachments/
-
-# Export single note as 7zip archive
-uv run noted export <id_or_uuid> --zip
-# Creates: ./Note Title.7z
-
-# Export ALL notes with attachments
+# Export all notes with attachments
 uv run noted export --all
-# Creates: ./notes_export/ with nested folder structure mirroring Apple Notes
-# Example: notes_export/Hobbies/Photography/Landscape Photos/Service Records.md
 
-# Export all notes with 7zip archive
-uv run noted export --all --zip
-# Creates: ./notes_export/ AND ./notes_export.7z
-# Shows progress: "Exporting notes... 150/150 notes" then "Creating archive... 412/412 files"
-
-# Export to custom directory
-uv run noted export --all -o ~/Backups/notes_2026-01-29
-
-# Export only notes from specific folder (matches anywhere in path)
-uv run noted export --all --folder "Work"
-
-# Export excluding deleted notes
-uv run noted export --all --exclude-deleted
-
-# Verbose export (show each note as it's exported)
-uv run noted export --all --verbose
-
-# Force refresh cached database
+# Refresh cache
 uv run noted refresh
 ```
 
-The CLI automatically caches a copy of the Apple Notes database to `~/.cache/noted/` and refreshes it when the source database changes.
-
-### Locked Notes
-
-**Important:** Apple Notes that are password-protected (locked) cannot be read by this tool. When exporting:
-
-- Locked notes are detected and skipped (content is encrypted)
-- A placeholder markdown file is created with a message explaining the note is locked
-- The `index.json` manifest marks these notes with `"locked": true` and `"export_status": "locked"`
-- Summary shows count of locked notes: "3 locked notes (placeholders created)"
-
-To export locked notes: unlock them in Apple Notes first, then run the export again.
+**See [USAGE.md](USAGE.md) for comprehensive documentation** including FTS5 query syntax, export options, and more.
 
 ## ENVIRONMENT VARIABLES
 
-Claude to complete this later as env variables are added
-
-### Using 1Password CLI
-
-The `.env` file contains `op://` secret references for use with 1Password CLI:
-
-```bash
-# Run any command with secrets injected
-op run --env-file .env -- uv run ...
-
-# Test that secrets are loading
-op run --env-file .env -- printenv | grep -E "ANTHROPIC|OPENAI|SLACK|BRAVE"
-```
-
-Edit `.env` to customize the `op://VAULT/ITEM/FIELD` paths to match your 1Password vault structure.
+None required at this time.
 
 ## PACKAGE STRUCTURE
 
@@ -149,12 +83,13 @@ noted/
 ├── src/noted/
 │   ├── __init__.py         # Package version
 │   ├── attachments.py      # Attachment export, archive creation
-│   ├── cli.py              # Typer CLI commands (list, count, view, export, refresh)
+│   ├── cli.py              # Typer CLI commands (list, count, view, export, refresh, index)
 │   ├── db.py               # Database caching, connection, queries
 │   ├── display.py          # Rich terminal output formatting
 │   ├── export.py           # Full export functionality, master index
-│   ├── models.py           # Note, NoteSummary, Attachment dataclasses
+│   ├── models.py           # Note, NoteSummary, Attachment, SearchResult dataclasses
 │   ├── protobuf.py         # Protobuf parsing for note content
+│   ├── search.py           # FTS5 full-text search index and queries
 │   └── tables.py           # Apple Notes CRDT table parsing
 ├── tests/
 │   ├── test_attachments.py # Attachment export tests
@@ -165,6 +100,7 @@ noted/
 │   ├── test_integration.py # Integration tests
 │   ├── test_models.py      # Model tests
 │   ├── test_protobuf.py    # Protobuf parsing tests
+│   ├── test_search.py      # FTS5 search tests
 │   └── test_tables.py      # Table parsing tests
 └── docs/
     ├── apple-notes-attachment-structure.md  # Attachment storage documentation

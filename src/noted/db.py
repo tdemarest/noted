@@ -156,6 +156,7 @@ def list_notes(
     conn: sqlite3.Connection,
     folder: str | None = None,
     limit: int | None = None,
+    search: str | None = None,
 ) -> list[Note]:
     """Query notes from the database.
 
@@ -163,6 +164,7 @@ def list_notes(
         conn: Database connection.
         folder: Filter by folder name, or None for all.
         limit: Maximum number of notes to return, or None for all.
+        search: Case-insensitive search term to filter by title or folder.
 
     Returns:
         List of Note objects sorted by modification date (newest first).
@@ -185,6 +187,13 @@ def list_notes(
     if folder is not None:
         query += " AND f.ZTITLE2 = ?"
         params.append(folder)
+
+    if search is not None:
+        # Case-insensitive search on title and folder
+        query += " AND (n.ZTITLE1 LIKE ? COLLATE NOCASE OR f.ZTITLE2 LIKE ? COLLATE NOCASE)"
+        search_pattern = f"%{search}%"
+        params.append(search_pattern)
+        params.append(search_pattern)
 
     query += " ORDER BY n.ZMODIFICATIONDATE DESC"
 

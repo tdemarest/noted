@@ -29,10 +29,19 @@ def test_decode_varint_multi_byte() -> None:
 def test_decode_fields_simple() -> None:
     """Test decoding simple protobuf fields."""
     # Field 1 (varint) = 150, Field 2 (string) = "test"
-    data = bytes([
-        0x08, 0x96, 0x01,  # field 1, varint 150
-        0x12, 0x04, 0x74, 0x65, 0x73, 0x74,  # field 2, string "test"
-    ])
+    data = bytes(
+        [
+            0x08,
+            0x96,
+            0x01,  # field 1, varint 150
+            0x12,
+            0x04,
+            0x74,
+            0x65,
+            0x73,
+            0x74,  # field 2, string "test"
+        ]
+    )
     fields: dict[int, list[tuple[int, Any]]] = decode_fields(data)
     assert 1 in fields
     assert fields[1][0][1] == 150  # (wire_type, value)

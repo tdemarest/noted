@@ -17,6 +17,7 @@ from noted.models import (
     NoteContent,
     NoteSummary,
     ParagraphType,
+    SearchResult,
     Table,
     TextAlignment,
     TextStyle,
@@ -25,17 +26,22 @@ from noted.models import (
 console = Console()
 
 
-def display_notes_table(notes: list[Note]) -> None:
+def display_notes_table(notes: list[Note], search: str | None = None) -> None:
     """Render notes as a Rich table.
 
     Args:
         notes: List of notes to display.
+        search: Optional search term to highlight in results.
     """
     if not notes:
-        console.print("[yellow]No notes found.[/yellow]")
+        if search:
+            console.print(f"[yellow]No notes matching '{search}'.[/yellow]")
+        else:
+            console.print("[yellow]No notes found.[/yellow]")
         return
 
-    table = RichTable(title="Notes", show_lines=False)
+    title = f"Notes matching '{search}'" if search else "Notes"
+    table = RichTable(title=title, show_lines=False)
     table.add_column("ID", style="dim", width=6)
     table.add_column("Title", style="bold")
     table.add_column("Folder", style="cyan")
@@ -45,16 +51,142 @@ def display_notes_table(notes: list[Note]) -> None:
     for note in notes:
         created_str = note.created.strftime("%Y-%m-%d %H:%M") if note.created else "-"
         modified_str = note.modified.strftime("%Y-%m-%d %H:%M") if note.modified else "-"
+
+        # Highlight search matches in title and folder
+        if search:
+            title_display = _highlight_match(note.title, search)
+            folder_display = _highlight_match(note.folder or "(No Folder)", search)
+        else:
+            title_display = Text(note.title)
+            folder_display = Text(note.folder or "(No Folder)", style="cyan")
+
         table.add_row(
             str(note.id),
-            note.title,
-            note.folder or "(No Folder)",
+            title_display,
+            folder_display,
             created_str,
             modified_str,
         )
 
     console.print(table)
-    console.print(f"\n[dim]Total: {len(notes)} notes[/dim]")
+    if search:
+        console.print(f"\n[dim]Found: {len(notes)} notes matching '{search}'[/dim]")
+    else:
+        console.print(f"\n[dim]Total: {len(notes)} notes[/dim]")
+
+
+def _highlight_match(text: str, search: str) -> Text:
+    """Highlight search term matches in text using Rich Text.
+
+    Performs case-insensitive matching and highlights all occurrences.
+
+    Args:
+        text: The text to search within.
+        search: The search term to highlight.
+
+    Returns:
+        Rich Text object with highlighted matches.
+    """
+    result = Text()
+    search_lower = search.lower()
+    text_lower = text.lower()
+
+    pos = 0
+    while pos < len(text):
+        match_pos = text_lower.find(search_lower, pos)
+        if match_pos == -1:
+            # No more matches, append rest of text
+            result.append(text[pos:])
+            break
+        else:
+            # Append text before match
+            if match_pos > pos:
+                result.append(text[pos:match_pos])
+            # Append highlighted match (preserve original case)
+            result.append(
+                text[match_pos : match_pos + len(search)],
+                style="bold yellow on red",
+            )
+            pos = match_pos + len(search)
+
+    return result
+
+
+def _format_snippet(snippet: str) -> Text:
+    """Format an FTS5 snippet with highlighted matches.
+
+    FTS5 uses <<< and >>> markers around matched terms.
+    This converts them to Rich Text with highlighting.
+
+    Args:
+        snippet: FTS5 snippet with <<< >>> markers.
+
+    Returns:
+        Rich Text object with highlighted matches.
+    """
+    result = Text()
+
+    pos = 0
+    while pos < len(snippet):
+        start = snippet.find("<<<", pos)
+        if start == -1:
+            # No more markers, append rest
+            result.append(snippet[pos:])
+            break
+
+        # Append text before marker
+        if start > pos:
+            result.append(snippet[pos:start])
+
+        # Find end marker
+        end = snippet.find(">>>", start)
+        if end == -1:
+            # Malformed, append rest as-is
+            result.append(snippet[pos:])
+            break
+
+        # Extract and highlight matched term
+        matched = snippet[start + 3 : end]
+        result.append(matched, style="bold yellow on red")
+        pos = end + 3
+
+    return result
+
+
+def display_search_results(results: list[SearchResult], query: str) -> None:
+    """Display FTS5 search results as a Rich table.
+
+    Shows note metadata with content snippets highlighting matches.
+
+    Args:
+        results: List of SearchResult objects from search_notes().
+        query: The search query (for display in title).
+    """
+    if not results:
+        console.print(f"[yellow]No notes matching '{query}' in content.[/yellow]")
+        return
+
+    table = RichTable(title=f"Deep search: '{query}'", show_lines=True)
+    table.add_column("ID", style="dim", width=6)
+    table.add_column("Title", style="bold", width=30)
+    table.add_column("Folder", style="cyan", width=20)
+    table.add_column("Match Context", width=50)
+
+    for result in results:
+        note = result.note
+
+        # Format snippet with highlighting
+        snippet_text = _format_snippet(result.snippet)
+
+        table.add_row(
+            str(note.id),
+            note.title,
+            note.folder or "(No Folder)",
+            snippet_text,
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Found: {len(results)} notes matching '{query}'[/dim]")
 
 
 def display_count(summary: NoteSummary) -> None:

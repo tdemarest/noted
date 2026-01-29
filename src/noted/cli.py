@@ -8,7 +8,7 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from noted import attachments, db, display, protobuf, tables
+from noted import attachments, db, display, protobuf, search, tables
 from noted import export as export_module
 
 # Debug mode state (set by callback)
@@ -82,12 +82,45 @@ def list(
         "-n",
         help="Limit number of results.",
     ),
+    search_query: str | None = typer.Option(
+        None,
+        "--search",
+        "-s",
+        help=(
+            "Search query. Without --deep: case-insensitive title/folder match. "
+            "With --deep: FTS5 full-text search supporting: "
+            'phrases ("exact phrase"), '
+            "boolean (AND, OR, NOT - uppercase), "
+            "grouping with parentheses, "
+            "prefix (budg*), "
+            "column filters (title:, folder:, content:)."
+        ),
+    ),
+    deep: bool = typer.Option(
+        False,
+        "--deep",
+        "-D",
+        help="Search note content using FTS5 full-text search (requires --search).",
+    ),
 ) -> None:
     """List all notes."""
+    # Validate: --deep requires --search
+    if deep and search_query is None:
+        display.display_error("--deep requires --search to be specified.")
+        raise typer.Exit(code=1)
+
     try:
         conn = db.get_connection()
-        notes = db.list_notes(conn, folder=folder, limit=limit)
-        display.display_notes_table(notes)
+
+        if deep and search_query:
+            # Deep content search using FTS5
+            results = search.search_notes(conn, search_query, folder=folder, limit=limit)
+            display.display_search_results(results, search_query)
+        else:
+            # Standard title/folder search
+            notes = db.list_notes(conn, folder=folder, limit=limit, search=search_query)
+            display.display_notes_table(notes, search=search_query)
+
         conn.close()
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")
@@ -124,9 +157,65 @@ def count(
 
 @app.command()
 def refresh() -> None:
-    """Force refresh the cached database copy."""
+    """Force refresh the cached database copy and FTS index."""
     db.clear_cache()
-    display.display_success("Cache cleared. Next command will use fresh data.")
+    search.clear_index()
+    display.display_success("Cache and FTS index cleared. Next command will use fresh data.")
+
+
+@app.command()
+def index(
+    rebuild: bool = typer.Option(
+        False,
+        "--rebuild",
+        "-r",
+        help="Force rebuild the FTS index.",
+    ),
+) -> None:
+    """Show FTS index status or rebuild."""
+    try:
+        if rebuild:
+            conn = db.get_connection()
+            count = search.build_index(conn, show_progress=True)
+            conn.close()
+            display.display_success(f"FTS index rebuilt with {count} notes.")
+        else:
+            # Show index status
+            status = search.get_index_status()
+
+            if not status["exists"]:
+                console.print("[yellow]FTS index does not exist.[/yellow]")
+                console.print("Run [bold]noted index --rebuild[/bold] to create it.")
+                console.print("Or run a deep search with [bold]--deep[/bold] to auto-create.")
+            else:
+                fresh_str = "[green]fresh[/green]" if status["fresh"] else "[yellow]stale[/yellow]"
+                console.print(f"[bold]FTS Index Status:[/bold] {fresh_str}")
+
+                if "note_count" in status:
+                    console.print(f"  Notes indexed: {status['note_count']}")
+                if "built_at" in status:
+                    console.print(f"  Built at: {status['built_at']}")
+                if "size_bytes" in status:
+                    size_bytes = int(status["size_bytes"])
+                    size_kb = size_bytes / 1024
+                    if size_kb >= 1024:
+                        size_str = f"{size_kb / 1024:.1f} MB"
+                    else:
+                        size_str = f"{size_kb:.1f} KB"
+                    console.print(f"  Index size: {size_str}")
+
+                if not status["fresh"]:
+                    console.print(
+                        "\n[dim]Index is stale. Run [bold]noted index --rebuild[/bold] "
+                        "or it will auto-rebuild on next deep search.[/dim]"
+                    )
+    except FileNotFoundError:
+        display.display_error("Apple Notes database not found.")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        logger.exception("Error managing FTS index")
+        display.display_error(str(e))
+        raise typer.Exit(code=1)
 
 
 @app.command()

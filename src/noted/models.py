@@ -171,3 +171,18 @@ class NoteContent:
     text: str
     attachments: list[Attachment] | None = None
     formatted_runs: list[FormattedRun] | None = None
+
+
+@dataclass
+class SearchResult:
+    """A search result from FTS5 full-text search.
+
+    Attributes:
+        note: The matching Note object with metadata.
+        snippet: Text snippet showing the match context with markers.
+        rank: FTS5 relevance score (lower is more relevant).
+    """
+
+    note: Note
+    snippet: str
+    rank: float

@@ -84,18 +84,20 @@ def decode_fields(data: bytes) -> dict[int, list[tuple[int, Any]]]:
 
 
 # Known CRDT metadata strings to filter out
-_CRDT_NOISE = frozenset({
-    "identity",
-    "dentity",  # Partial match
-    "cellColumns",
-    "UUIDIndex",
-    "UIDI",  # Partial match
-    "crRows",
-    "crTableColumnDirection",
-    "self",
-    "crColumns",
-    "CRTableColumnDirectionLeftToRight",
-})
+_CRDT_NOISE = frozenset(
+    {
+        "identity",
+        "dentity",  # Partial match
+        "cellColumns",
+        "UUIDIndex",
+        "UIDI",  # Partial match
+        "crRows",
+        "crTableColumnDirection",
+        "self",
+        "crColumns",
+        "CRTableColumnDirectionLeftToRight",
+    }
+)
 
 # Substrings that indicate CRDT noise
 _CRDT_SUBSTRINGS = (
@@ -163,9 +165,7 @@ def _extract_strings_from_data(data: bytes) -> list[str]:
     return strings
 
 
-def _extract_strings_recursive(
-    data: bytes, depth: int = 0, max_depth: int = 5
-) -> list[str]:
+def _extract_strings_recursive(data: bytes, depth: int = 0, max_depth: int = 5) -> list[str]:
     """Recursively decode protobuf and extract strings.
 
     Args:
@@ -293,9 +293,23 @@ def _parse_mergeable_data_object(obj_data: bytes, summary: str = "") -> Table | 
 
     # Find potential headers - only use exact matches from common set
     common_headers = {
-        "Date", "Miles", "Cost", "Performed By", "Service Desc",
-        "Name", "Description", "Price", "Quantity", "Total", "Qty",
-        "Item", "Amount", "Status", "Notes", "Category", "Type",
+        "Date",
+        "Miles",
+        "Cost",
+        "Performed By",
+        "Service Desc",
+        "Name",
+        "Description",
+        "Price",
+        "Quantity",
+        "Total",
+        "Qty",
+        "Item",
+        "Amount",
+        "Status",
+        "Notes",
+        "Category",
+        "Type",
     }
 
     header_positions: list[tuple[int, str]] = []
@@ -473,9 +487,7 @@ def _reorder_rows_by_summary(table: Table, summary: str) -> Table:
         i += 1
 
     if len(display_order) != table.rows - 1:
-        logger.debug(
-            f"Row reorder: found {len(display_order)} keys, expected {table.rows - 1}"
-        )
+        logger.debug(f"Row reorder: found {len(display_order)} keys, expected {table.rows - 1}")
         return table
 
     # Build mapping using multiple columns for disambiguation
@@ -484,8 +496,7 @@ def _reorder_rows_by_summary(table: Table, summary: str) -> Table:
 
     for first_col, col2, col3 in display_order:
         candidates = [
-            r for r in storage_first_cols.get(first_col, [])
-            if r not in used_storage_rows
+            r for r in storage_first_cols.get(first_col, []) if r not in used_storage_rows
         ]
 
         if not candidates:
