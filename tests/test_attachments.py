@@ -3,6 +3,7 @@
 from noted.attachments import (
     AttachmentExportResult,
     ExportedAttachment,
+    make_unique_filename,
     sanitize_filename,
     uti_to_extension,
 )
@@ -109,3 +110,26 @@ def test_sanitize_filename_empty() -> None:
 def test_sanitize_filename_only_bad_chars() -> None:
     """Test sanitize_filename with only bad characters."""
     assert sanitize_filename("***") == "attachment"
+
+
+def test_make_unique_filename_no_conflict() -> None:
+    """Test make_unique_filename when no conflict exists."""
+    used: set[str] = set()
+    result = make_unique_filename("photo.jpg", "uuid-123", used)
+    assert result == "photo.jpg"
+    assert "photo.jpg" in used
+
+
+def test_make_unique_filename_with_conflict() -> None:
+    """Test make_unique_filename adds UUID suffix on conflict."""
+    used = {"photo.jpg"}
+    result = make_unique_filename("photo.jpg", "abc123def456", used)
+    assert result == "photo_abc123.jpg"
+    assert "photo_abc123.jpg" in used
+
+
+def test_make_unique_filename_no_extension() -> None:
+    """Test make_unique_filename handles files without extension."""
+    used = {"README"}
+    result = make_unique_filename("README", "xyz789", used)
+    assert result == "README_xyz789"

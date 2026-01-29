@@ -103,3 +103,33 @@ def sanitize_filename(name: str) -> str:
         return "attachment"
 
     return result
+
+
+def make_unique_filename(
+    filename: str,
+    identifier: str,
+    used_names: set[str],
+) -> str:
+    """Generate a unique filename, adding UUID suffix if needed.
+
+    Args:
+        filename: Desired filename.
+        identifier: Attachment UUID for suffix if conflict.
+        used_names: Set of already-used filenames (modified in place).
+
+    Returns:
+        Unique filename (original or with UUID suffix).
+    """
+    if filename not in used_names:
+        used_names.add(filename)
+        return filename
+
+    # Split into name and extension
+    if "." in filename:
+        name, ext = filename.rsplit(".", 1)
+        unique = f"{name}_{identifier[:6]}.{ext}"
+    else:
+        unique = f"{filename}_{identifier[:6]}"
+
+    used_names.add(unique)
+    return unique
