@@ -363,9 +363,9 @@ def export_all_notes(
     """
     from rich.progress import (
         BarColumn,
+        MofNCompleteColumn,
         Progress,
         SpinnerColumn,
-        TaskProgressColumn,
         TextColumn,
     )
 
@@ -399,7 +399,8 @@ def export_all_notes(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TaskProgressColumn(),
+        MofNCompleteColumn(),
+        TextColumn("notes"),
         disable=options.verbose,
     ) as progress:
         task = progress.add_task("Exporting notes...", total=len(notes))
@@ -493,31 +494,53 @@ def export_all_notes(
 
     # Create archive if requested
     if options.create_archive:
-        archive_path = create_full_archive(options.output_dir)
+        archive_path = create_full_archive(options.output_dir, verbose=options.verbose)
         full_result.archive_path = archive_path
 
     return full_result
 
 
-def create_full_archive(output_dir: Path) -> Path:
+def create_full_archive(output_dir: Path, verbose: bool = False) -> Path:
     """Create 7zip archive of the entire export.
 
     Unlike single-note archive, this keeps the original files.
+    Shows a progress bar during compression.
 
     Args:
         output_dir: Directory to archive.
+        verbose: If True, disable progress bar (verbose mode shows text).
 
     Returns:
         Path to created .7z archive.
     """
     import py7zr
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+    )
 
     archive_path = output_dir.with_suffix(".7z")
 
-    with py7zr.SevenZipFile(archive_path, "w") as archive:
-        for file in output_dir.rglob("*"):
-            if file.is_file():
+    # Collect all files first for progress tracking
+    files_to_archive = [f for f in output_dir.rglob("*") if f.is_file()]
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("files"),
+        disable=verbose,
+    ) as progress:
+        task = progress.add_task("Creating archive...", total=len(files_to_archive))
+
+        with py7zr.SevenZipFile(archive_path, "w") as archive:
+            for file in files_to_archive:
                 arcname = str(file.relative_to(output_dir.parent))
                 archive.write(file, arcname)
+                progress.update(task, advance=1)
 
     return archive_path
