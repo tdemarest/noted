@@ -4,7 +4,9 @@ Handles exporting all notes to a structured folder hierarchy
 with master index and optional 7zip compression.
 """
 
+import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from noted.models import Note
@@ -147,3 +149,65 @@ def make_unique_folder_name(
     unique = f"{folder_name}_{identifier[:6]}"
     used_names.add(unique)
     return unique
+
+
+def generate_master_index(
+    index_path: Path,
+    result: FullExportResult,
+    folder_info: list[dict[str, str | int]],
+) -> None:
+    """Generate master index.json for full export.
+
+    Args:
+        index_path: Path to write index.json.
+        result: Export result with statistics and note list.
+        folder_info: List of folder info dicts with name, path, note_count.
+    """
+    notes_data = []
+    for note_result in result.notes:
+        notes_data.append(
+            {
+                "id": note_result.note_id,
+                "identifier": note_result.identifier,
+                "title": note_result.title,
+                "folder": note_result.folder,
+                "path": str(note_result.path) if note_result.path else None,
+                "attachment_count": note_result.attachment_count,
+                "locked": note_result.status == "locked",
+                "export_status": note_result.status,
+            }
+        )
+
+    errors_data = []
+    for error in result.errors:
+        errors_data.append(
+            {
+                "note_id": error.note_id,
+                "identifier": error.identifier,
+                "title": error.title,
+                "folder": error.folder,
+                "error": error.error,
+            }
+        )
+
+    index = {
+        "export_version": "1.0",
+        "exported_at": datetime.now(UTC).isoformat(),
+        "source": "Apple Notes",
+        "statistics": {
+            "total_notes": result.total_notes,
+            "exported_count": result.exported_count,
+            "locked_count": result.locked_count,
+            "failed_count": result.failed_count,
+            "total_attachments": result.total_attachments,
+            "total_folders": len(folder_info),
+        },
+        "folders": folder_info,
+        "notes": notes_data,
+        "errors": errors_data,
+    }
+
+    index_path.write_text(
+        json.dumps(index, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )

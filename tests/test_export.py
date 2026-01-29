@@ -1,5 +1,6 @@
 """Tests for noted.export module."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -148,3 +149,87 @@ def test_make_unique_folder_name_with_conflict() -> None:
     result = make_unique_folder_name("Meeting_Notes", "abc123def456", used)
     assert result == "Meeting_Notes_abc123"
     assert "Meeting_Notes_abc123" in used
+
+
+def test_generate_master_index(tmp_path: Path) -> None:
+    """Test master index.json generation."""
+    from noted.export import (
+        ExportError,
+        FullExportResult,
+        NoteExportResult,
+        generate_master_index,
+    )
+
+    result = FullExportResult(
+        output_dir=tmp_path,
+        archive_path=None,
+        total_notes=3,
+        exported_count=2,
+        locked_count=1,
+        failed_count=0,
+        total_attachments=5,
+        folders=["Work", "Personal"],
+        notes=[
+            NoteExportResult(
+                note_id=1,
+                identifier="uuid-1",
+                title="Note 1",
+                folder="Work",
+                status="success",
+                path=Path("Work/Note_1/Note_1.md"),
+                attachment_count=3,
+                error=None,
+            ),
+            NoteExportResult(
+                note_id=2,
+                identifier="uuid-2",
+                title="Locked",
+                folder="Personal",
+                status="locked",
+                path=Path("Personal/Locked/Locked.md"),
+                attachment_count=0,
+                error=None,
+            ),
+        ],
+        errors=[
+            ExportError(
+                note_id=99,
+                identifier="uuid-99",
+                title="Broken",
+                folder="Work",
+                error="Decompression failed",
+            ),
+        ],
+    )
+
+    folder_info = [
+        {"name": "Work", "path": "Work/", "note_count": 1},
+        {"name": "Personal", "path": "Personal/", "note_count": 1},
+    ]
+
+    index_path = tmp_path / "index.json"
+    generate_master_index(index_path, result, folder_info)
+
+    assert index_path.exists()
+    data = json.loads(index_path.read_text())
+
+    assert data["export_version"] == "1.0"
+    assert data["source"] == "Apple Notes"
+    assert data["statistics"]["total_notes"] == 3
+    assert data["statistics"]["exported_count"] == 2
+    assert data["statistics"]["locked_count"] == 1
+    assert data["statistics"]["total_folders"] == 2
+    assert len(data["folders"]) == 2
+    assert len(data["notes"]) == 2
+    assert len(data["errors"]) == 1
+
+    # Check first note
+    note1 = data["notes"][0]
+    assert note1["id"] == 1
+    assert note1["identifier"] == "uuid-1"
+    assert note1["export_status"] == "success"
+
+    # Check error
+    error1 = data["errors"][0]
+    assert error1["note_id"] == 99
+    assert error1["error"] == "Decompression failed"
