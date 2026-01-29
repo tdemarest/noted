@@ -310,10 +310,6 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
         cells_per_col = header_positions[0][0] + 1
         num_rows = cells_per_col
 
-        # Build grid: columns are stored sequentially
-        # Each column has (num_rows - 1) data cells followed by 1 header
-        grid_cells: dict[tuple[int, int], str] = {}
-
         # Map storage columns to display columns based on header order
         # Headers are at positions 0*cells_per_col + (cells_per_col-1), etc.
         storage_col_headers: list[str] = []
@@ -322,7 +318,8 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
             if header_pos < len(cell_values):
                 storage_col_headers.append(cell_values[header_pos])
 
-        # For each storage column, extract cells
+        # For each storage column, extract cells into storage_grid
+        storage_grid: dict[tuple[int, int], str] = {}
         for storage_col in range(num_cols):
             col_start = storage_col * cells_per_col
             col_end = col_start + cells_per_col
@@ -330,14 +327,14 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
             # Header goes in row 0
             header_idx = col_end - 1
             if header_idx < len(cell_values):
-                grid_cells[(0, storage_col)] = cell_values[header_idx]
+                storage_grid[(0, storage_col)] = cell_values[header_idx]
 
             # Data cells go in rows 1+
             for data_idx in range(col_start, min(col_end - 1, len(cell_values))):
                 row = data_idx - col_start + 1
-                grid_cells[(row, storage_col)] = cell_values[data_idx]
+                storage_grid[(row, storage_col)] = cell_values[data_idx]
 
-        return Table(rows=num_rows, columns=num_cols, cells=grid_cells)
+        return Table(rows=num_rows, columns=num_cols, cells=storage_grid)
 
     # Fallback: single column
     cells: dict[tuple[int, int], str] = {}
@@ -345,6 +342,60 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
         cells[(i, 0)] = val
 
     return Table(rows=len(cell_values), columns=1, cells=cells)
+
+
+def _reorder_columns_by_summary(table: Table, summary: str) -> Table:
+    """Reorder table columns to match display order from ZSUMMARY.
+
+    Apple Notes stores columns in creation order (storage order), but the
+    ZSUMMARY field contains headers in display order. This function reorders
+    the columns to match the display order.
+
+    Args:
+        table: Table with columns in storage order.
+        summary: ZSUMMARY text with headers in display order (newline-separated).
+
+    Returns:
+        Table with columns reordered to display order.
+    """
+    if not summary or table.columns <= 1:
+        return table
+
+    # Extract display order headers from summary (first N lines = headers)
+    summary_lines = [line.strip() for line in summary.split("\n") if line.strip()]
+    display_headers = summary_lines[: table.columns]
+
+    if len(display_headers) != table.columns:
+        return table
+
+    # Get storage order headers from row 0
+    storage_headers = [table.get_cell(0, col) for col in range(table.columns)]
+
+    # Build mapping: display_col -> storage_col
+    col_mapping: list[int] = []
+    for display_header in display_headers:
+        found = False
+        for storage_col, storage_header in enumerate(storage_headers):
+            if storage_header == display_header and storage_col not in col_mapping:
+                col_mapping.append(storage_col)
+                found = True
+                break
+        if not found:
+            # Header not found - can't reorder
+            return table
+
+    if len(col_mapping) != table.columns:
+        return table
+
+    # Reorder cells
+    new_cells: dict[tuple[int, int], str] = {}
+    for row in range(table.rows):
+        for display_col, storage_col in enumerate(col_mapping):
+            cell_value = table.get_cell(row, storage_col)
+            if cell_value:
+                new_cells[(row, display_col)] = cell_value
+
+    return Table(rows=table.rows, columns=table.columns, cells=new_cells)
 
 
 def _fallback_string_extraction(data: bytes) -> Table | None:
@@ -364,11 +415,12 @@ def _fallback_string_extraction(data: bytes) -> Table | None:
     return Table(rows=len(strings), columns=1, cells=cells)
 
 
-def parse_table_data(data: bytes) -> Table | None:
+def parse_table_data(data: bytes, summary: str = "") -> Table | None:
     """Parse gzipped CRDT table protobuf from ZMERGEABLEDATA1.
 
     Args:
         data: Gzipped protobuf bytes from database.
+        summary: Optional ZSUMMARY text containing headers in display order.
 
     Returns:
         Table with extracted cells, or None if parsing fails completely.
@@ -407,7 +459,10 @@ def parse_table_data(data: bytes) -> Table | None:
         if not isinstance(obj_data, bytes):
             return _fallback_string_extraction(decompressed)
 
-        return _parse_mergeable_data_object(obj_data)
+        table = _parse_mergeable_data_object(obj_data)
+        if table and summary:
+            table = _reorder_columns_by_summary(table, summary)
+        return table
 
     except Exception as e:
         logger.debug(f"Failed to parse table structure: {e}")

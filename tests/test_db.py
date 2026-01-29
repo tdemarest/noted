@@ -232,16 +232,18 @@ def test_get_table_data(tmp_path: Path) -> None:
             Z_PK INTEGER PRIMARY KEY,
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
-            ZMERGEABLEDATA1 BLOB
+            ZMERGEABLEDATA1 BLOB,
+            ZSUMMARY TEXT
         )
     """)
 
     test_data = b"\x1f\x8b\x08\x00table_data"
+    test_summary = "Header1\nHeader2\nData"
     conn.execute(
         """INSERT INTO ZICCLOUDSYNCINGOBJECT
-           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZMERGEABLEDATA1)
-           VALUES (?, ?, ?, ?)""",
-        (1, "test-uuid", "com.apple.notes.table", test_data),
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZMERGEABLEDATA1, ZSUMMARY)
+           VALUES (?, ?, ?, ?, ?)""",
+        (1, "test-uuid", "com.apple.notes.table", test_data, test_summary),
     )
     conn.commit()
     conn.close()
@@ -250,7 +252,9 @@ def test_get_table_data(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     result = get_table_data(conn, "test-uuid")
-    assert result == test_data
+    assert result is not None
+    assert result[0] == test_data
+    assert result[1] == test_summary
     conn.close()
 
 
@@ -262,7 +266,8 @@ def test_get_table_data_not_found(tmp_path: Path) -> None:
         CREATE TABLE ZICCLOUDSYNCINGOBJECT (
             Z_PK INTEGER PRIMARY KEY,
             ZIDENTIFIER TEXT,
-            ZMERGEABLEDATA1 BLOB
+            ZMERGEABLEDATA1 BLOB,
+            ZSUMMARY TEXT
         )
     """)
     conn.commit()

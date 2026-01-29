@@ -319,18 +319,19 @@ def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, st
     return {row["ZIDENTIFIER"]: row["ZTITLE"] for row in cursor}
 
 
-def get_table_data(conn: sqlite3.Connection, identifier: str) -> bytes | None:
-    """Fetch ZMERGEABLEDATA1 for a table attachment by identifier.
+def get_table_data(conn: sqlite3.Connection, identifier: str) -> tuple[bytes, str] | None:
+    """Fetch ZMERGEABLEDATA1 and ZSUMMARY for a table attachment by identifier.
 
     Args:
         conn: Database connection.
         identifier: The attachment's unique identifier (UUID).
 
     Returns:
-        Raw gzipped protobuf bytes, or None if not found.
+        Tuple of (raw gzipped protobuf bytes, summary text), or None if not found.
+        The summary contains column headers in display order.
     """
     query = """
-        SELECT ZMERGEABLEDATA1
+        SELECT ZMERGEABLEDATA1, ZSUMMARY
         FROM ZICCLOUDSYNCINGOBJECT
         WHERE ZIDENTIFIER = ?
           AND ZMERGEABLEDATA1 IS NOT NULL
@@ -339,4 +340,4 @@ def get_table_data(conn: sqlite3.Connection, identifier: str) -> bytes | None:
     row = cursor.fetchone()
     if row is None:
         return None
-    return row["ZMERGEABLEDATA1"]
+    return (row["ZMERGEABLEDATA1"], row["ZSUMMARY"] or "")

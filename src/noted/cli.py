@@ -112,9 +112,10 @@ def view(
         if content.attachments:
             for attachment in content.attachments:
                 if attachment.type_uti == "com.apple.notes.table":
-                    table_data = db.get_table_data(conn, attachment.identifier)
-                    if table_data:
-                        attachment.table = tables.parse_table_data(table_data)
+                    result = db.get_table_data(conn, attachment.identifier)
+                    if result:
+                        table_data, summary = result
+                        attachment.table = tables.parse_table_data(table_data, summary)
 
         conn.close()
 
