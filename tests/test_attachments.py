@@ -1,17 +1,20 @@
 """Tests for noted.attachments."""
 
 import json
+import sqlite3
 from pathlib import Path
 
 from noted.attachments import (
     AttachmentExportResult,
     ExportedAttachment,
+    export_attachments,
     generate_manifest,
     get_skip_reason,
     make_unique_filename,
     sanitize_filename,
     uti_to_extension,
 )
+from noted.models import Attachment
 
 
 def test_exported_attachment_exported() -> None:
@@ -204,3 +207,136 @@ def test_generate_manifest(tmp_path: Path) -> None:
     assert att3["filename"] is None
     assert att3["exported"] is False
     assert att3["skip_reason"] == "Rendered inline"
+
+
+def test_export_attachments_single_image(tmp_path: Path) -> None:
+    """Test exporting a single image attachment."""
+    # Set up test database
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZDATA BLOB
+        )
+    """)
+    image_data = b"\x89PNG\r\n\x1a\nfake_png_data"
+    conn.execute(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT VALUES (?, ?, ?, ?, ?)",
+        (1, "img-uuid", "public.png", "photo.png", image_data),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    attachments = [
+        Attachment(identifier="img-uuid", type_uti="public.png", title="photo.png"),
+    ]
+
+    result = export_attachments(
+        conn=conn,
+        attachments=attachments,
+        output_dir=tmp_path,
+        base_name="TestNote",
+        note_id=1,
+        note_title="Test Note",
+    )
+
+    conn.close()
+
+    # Verify results
+    assert len(result.exported) == 1
+    assert len(result.skipped) == 0
+    assert result.attachments_dir is not None
+    assert result.attachments_dir.exists()
+
+    # Check exported file
+    exported_file = result.attachments_dir / "photo.png"
+    assert exported_file.exists()
+    assert exported_file.read_bytes() == image_data
+
+    # Check manifest
+    assert result.manifest_path is not None
+    assert result.manifest_path.exists()
+
+
+def test_export_attachments_skips_tables(tmp_path: Path) -> None:
+    """Test that table attachments are skipped."""
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZDATA BLOB
+        )
+    """)
+    # Table has no ZDATA
+    conn.execute(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT VALUES (?, ?, ?, ?, ?)",
+        (1, "table-uuid", "com.apple.notes.table", None, None),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    attachments = [
+        Attachment(identifier="table-uuid", type_uti="com.apple.notes.table"),
+    ]
+
+    result = export_attachments(
+        conn=conn,
+        attachments=attachments,
+        output_dir=tmp_path,
+        base_name="TestNote",
+        note_id=1,
+        note_title="Test Note",
+    )
+
+    conn.close()
+
+    assert len(result.exported) == 0
+    assert len(result.skipped) == 1
+    assert result.skipped[0].skip_reason is not None
+
+
+def test_export_attachments_empty_list(tmp_path: Path) -> None:
+    """Test export with empty attachment list."""
+    test_db = tmp_path / "test.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    result = export_attachments(
+        conn=conn,
+        attachments=[],
+        output_dir=tmp_path,
+        base_name="TestNote",
+        note_id=1,
+        note_title="Test Note",
+    )
+
+    conn.close()
+
+    assert len(result.exported) == 0
+    assert len(result.skipped) == 0
+    assert result.attachments_dir is None
+    assert result.manifest_path is None

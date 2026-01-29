@@ -6,9 +6,13 @@ with optional 7zip compression.
 
 import json
 import re
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from noted import db
+from noted.models import Attachment
 
 
 @dataclass
@@ -208,3 +212,117 @@ def generate_manifest(
     }
 
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def export_attachments(
+    conn: sqlite3.Connection,
+    attachments: list[Attachment],
+    output_dir: Path,
+    base_name: str,
+    note_id: int,
+    note_title: str,
+) -> AttachmentExportResult:
+    """Export all attachments for a note to disk.
+
+    Creates {base_name}_attachments/ directory containing:
+    - Binary files for exportable attachments
+    - manifest.json listing all attachments
+
+    Args:
+        conn: Database connection.
+        attachments: List of attachments from note content.
+        output_dir: Parent directory for output.
+        base_name: Base name for attachments directory.
+        note_id: Note's database ID for manifest.
+        note_title: Note's title for manifest.
+
+    Returns:
+        AttachmentExportResult with lists of exported/skipped attachments.
+    """
+    if not attachments:
+        return AttachmentExportResult(
+            exported=[],
+            skipped=[],
+            manifest_path=None,
+            attachments_dir=None,
+        )
+
+    exported: list[ExportedAttachment] = []
+    skipped: list[ExportedAttachment] = []
+    used_names: set[str] = set()
+
+    # Create attachments directory
+    attachments_dir = output_dir / f"{base_name}_attachments"
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+
+    for att in attachments:
+        # Check if this type is exportable
+        skip_reason = get_skip_reason(att.type_uti)
+        if skip_reason:
+            skipped.append(
+                ExportedAttachment(
+                    identifier=att.identifier,
+                    filename=None,
+                    type_uti=att.type_uti,
+                    exported=False,
+                    skip_reason=skip_reason,
+                )
+            )
+            continue
+
+        # Fetch binary data
+        data = db.get_attachment_data(conn, att.identifier)
+        if data is None:
+            skipped.append(
+                ExportedAttachment(
+                    identifier=att.identifier,
+                    filename=None,
+                    type_uti=att.type_uti,
+                    exported=False,
+                    skip_reason="No binary data in database",
+                )
+            )
+            continue
+
+        binary_data, type_uti, db_title = data
+
+        # Determine filename
+        title = att.title or db_title
+        if title:
+            filename = sanitize_filename(title)
+        else:
+            # Generate from UTI
+            ext = uti_to_extension(type_uti)
+            filename = f"attachment{ext}"
+
+        # Ensure extension
+        if "." not in filename:
+            filename += uti_to_extension(type_uti)
+
+        # Make unique
+        filename = make_unique_filename(filename, att.identifier, used_names)
+
+        # Write file
+        file_path = attachments_dir / filename
+        file_path.write_bytes(binary_data)
+
+        exported.append(
+            ExportedAttachment(
+                identifier=att.identifier,
+                filename=filename,
+                type_uti=att.type_uti,
+                exported=True,
+                skip_reason=None,
+            )
+        )
+
+    # Generate manifest
+    manifest_path = attachments_dir / "manifest.json"
+    generate_manifest(manifest_path, note_id, note_title, exported, skipped)
+
+    return AttachmentExportResult(
+        exported=exported,
+        skipped=skipped,
+        manifest_path=manifest_path,
+        attachments_dir=attachments_dir,
+    )
