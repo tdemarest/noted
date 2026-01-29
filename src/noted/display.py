@@ -958,7 +958,7 @@ def display_note_json(note: Note, content: NoteContent, include_styling: bool = 
 
 
 def get_note_html(note: Note, content: NoteContent) -> str:
-    """Get a note as a standalone HTML5 document with Adeia branding.
+    """Get a note as a standalone HTML5 document.
 
     Args:
         note: Note metadata (title, folder, dates).
@@ -988,7 +988,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
     folder_str = note.folder or "No Folder"
     modified_str = note.modified.strftime("%Y-%m-%d %H:%M") if note.modified else "-"
 
-    # Build full HTML document with Adeia branding
+    # Build full HTML document
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1001,16 +1001,16 @@ def get_note_html(note: Note, content: NoteContent) -> str:
           rel="stylesheet">
     <style>
         :root {{
-            --adeia-purple: #5014D7;
-            --adeia-purple-dark: #3D0FA5;
-            --adeia-purple-light: #E8DEFF;
-            --adeia-black: #1E1E1E;
-            --adeia-charcoal: #5A5A5A;
-            --adeia-gray: #909090;
-            --adeia-cement: #CCCCCC;
-            --adeia-mist: #EAEAEA;
-            --adeia-white: #FFFFFF;
-            --adeia-yellow: #FFBE5A;
+            --noted-purple: #5014D7;
+            --noted-purple-dark: #3D0FA5;
+            --noted-purple-light: #E8DEFF;
+            --noted-black: #1E1E1E;
+            --noted-charcoal: #5A5A5A;
+            --noted-gray: #909090;
+            --noted-cement: #CCCCCC;
+            --noted-mist: #EAEAEA;
+            --noted-white: #FFFFFF;
+            --noted-yellow: #FFBE5A;
         }}
 
         * {{
@@ -1021,8 +1021,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
             font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             font-size: 16px;
             line-height: 1.6;
-            color: var(--adeia-black);
-            background-color: var(--adeia-white);
+            color: var(--noted-black);
+            background-color: var(--noted-white);
             margin: 0;
             padding: 0;
         }}
@@ -1034,8 +1034,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         header {{
-            background: linear-gradient(135deg, var(--adeia-purple), var(--adeia-purple-dark));
-            color: var(--adeia-white);
+            background: linear-gradient(135deg, var(--noted-purple), var(--noted-purple-dark));
+            color: var(--noted-white);
             padding: 2rem;
             margin-bottom: 2rem;
             border-radius: 0 0 8px 8px;
@@ -1053,14 +1053,14 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         article {{
-            background: var(--adeia-white);
+            background: var(--noted-white);
             padding: 2rem;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }}
 
         h1, h2, h3 {{
-            color: var(--adeia-purple);
+            color: var(--noted-purple);
             margin-top: 1.5rem;
             margin-bottom: 0.75rem;
         }}
@@ -1074,7 +1074,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         a {{
-            color: var(--adeia-purple);
+            color: var(--noted-purple);
             text-decoration: none;
         }}
 
@@ -1103,20 +1103,20 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         .checklist li.checked {{
-            color: var(--adeia-gray);
+            color: var(--noted-gray);
             text-decoration: line-through;
         }}
 
         .checkbox {{
-            color: var(--adeia-purple);
+            color: var(--noted-purple);
             font-size: 1.1em;
         }}
 
         blockquote {{
-            border-left: 4px solid var(--adeia-purple);
+            border-left: 4px solid var(--noted-purple);
             margin: 1rem 0;
             padding: 0.5rem 1rem;
-            background: var(--adeia-purple-light);
+            background: var(--noted-purple-light);
             border-radius: 0 4px 4px 0;
         }}
 
@@ -1125,8 +1125,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         pre {{
-            background: var(--adeia-black);
-            color: var(--adeia-white);
+            background: var(--noted-black);
+            color: var(--noted-white);
             padding: 1rem;
             border-radius: 4px;
             overflow-x: auto;
@@ -1135,7 +1135,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         code {{
-            background: var(--adeia-mist);
+            background: var(--noted-mist);
             padding: 0.2em 0.4em;
             border-radius: 3px;
             font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -1154,23 +1154,23 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         th, td {{
-            border: 1px solid var(--adeia-cement);
+            border: 1px solid var(--noted-cement);
             padding: 0.75rem;
             text-align: left;
         }}
 
         th {{
-            background: var(--adeia-purple);
-            color: var(--adeia-white);
+            background: var(--noted-purple);
+            color: var(--noted-white);
             font-weight: 500;
         }}
 
         tr:nth-child(even) {{
-            background: var(--adeia-mist);
+            background: var(--noted-mist);
         }}
 
         .highlight {{
-            background: var(--adeia-yellow);
+            background: var(--noted-yellow);
             padding: 0.1em 0.2em;
             border-radius: 2px;
         }}
@@ -1178,8 +1178,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         footer {{
             margin-top: 2rem;
             padding-top: 1rem;
-            border-top: 1px solid var(--adeia-cement);
-            color: var(--adeia-gray);
+            border-top: 1px solid var(--noted-cement);
+            color: var(--noted-gray);
             font-size: 0.85rem;
             text-align: center;
         }}
@@ -1208,7 +1208,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
 
 
 def display_note_html(note: Note, content: NoteContent) -> None:
-    """Output a note as a standalone HTML5 document with Adeia branding.
+    """Output a note as a standalone HTML5 document.
 
     Args:
         note: Note metadata (title, folder, dates).
