@@ -1,5 +1,7 @@
 """Terminal display formatting using Rich."""
 
+import re
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -118,15 +120,39 @@ def display_note_view(note: Note, content: NoteContent) -> None:
 
 
 def _render_text_with_tables(text: str, table_lookup: dict[str, Table]) -> None:
-    """Render text, replacing [Table] markers with actual tables.
+    """Render text, replacing [Table:id] markers with actual tables.
 
     Args:
-        text: Note text with [Table] markers.
+        text: Note text with [Table:identifier] markers.
         table_lookup: Mapping of identifier to parsed Table.
     """
-    # For now, just print the text - tables show as [Table] marker
-    # TODO: Parse markers and render inline tables
-    console.print(text)
+    # Pattern matches [Table:uuid-here]
+    pattern = r"\[Table:([^\]]+)\]"
+
+    last_end = 0
+    for match in re.finditer(pattern, text):
+        # Print text before this marker
+        before = text[last_end : match.start()]
+        if before:
+            console.print(before, end="")
+
+        # Render the table
+        identifier = match.group(1)
+        if identifier in table_lookup:
+            table = table_lookup[identifier]
+            rich_table = table_to_rich(table)
+            console.print()
+            console.print(rich_table)
+        else:
+            # Table not parsed, show placeholder
+            console.print("[Table]", end="")
+
+        last_end = match.end()
+
+    # Print remaining text
+    remaining = text[last_end:]
+    if remaining:
+        console.print(remaining)
 
 
 def table_to_rich(table: Table) -> RichTable:

@@ -102,7 +102,10 @@ def _process_attachments(
 
             # Replace U+FFFC with attachment marker
             type_name = _uti_to_type(uti)
-            if title:
+            if type_name == "Table" and identifier:
+                # Use unique marker for tables to enable inline rendering
+                marker = f"[Table:{identifier}]"
+            elif title:
                 marker = f"[{type_name}: {title}]"
             else:
                 marker = f"[{type_name}]"
