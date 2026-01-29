@@ -12,15 +12,15 @@ class Note:
         id: The Z_PK primary key from the database.
         title: The note title (ZTITLE1 field).
         folder: The folder name, or None if not in a folder.
-        created: When the note was created.
-        modified: When the note was last modified.
+        created: When the note was created, or None if unknown.
+        modified: When the note was last modified, or None if unknown.
     """
 
     id: int
     title: str
     folder: str | None
-    created: datetime
-    modified: datetime
+    created: datetime | None
+    modified: datetime | None
 
 
 @dataclass

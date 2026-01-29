@@ -11,6 +11,7 @@ from noted.db import (
     apple_timestamp_to_datetime,
     clear_cache,
     get_connection,
+    get_note_content,
 )
 
 
@@ -86,3 +87,68 @@ def test_get_connection(tmp_path: Path) -> None:
         except sqlite3.OperationalError as e:
             assert "readonly" in str(e).lower()
         conn.close()
+
+
+def test_get_note_content(tmp_path: Path) -> None:
+    """Test fetching raw note content bytes."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+
+    # Create minimal schema matching Apple Notes
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZTITLE1 TEXT,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE ZICNOTEDATA (
+            Z_PK INTEGER PRIMARY KEY,
+            ZNOTE INTEGER,
+            ZDATA BLOB
+        )
+    """)
+
+    # Insert test note
+    conn.execute("INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE1) VALUES (1, 'Test')")
+    test_data = b"\x1f\x8b\x08\x00test"  # Fake gzip-like data
+    conn.execute("INSERT INTO ZICNOTEDATA (Z_PK, ZNOTE, ZDATA) VALUES (1, 1, ?)", (test_data,))
+    conn.commit()
+    conn.close()
+
+    # Reopen read-only
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    result = get_note_content(conn, 1)
+    assert result == test_data
+    conn.close()
+
+
+def test_get_note_content_not_found(tmp_path: Path) -> None:
+    """Test fetching content for non-existent note."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZTITLE1 TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE ZICNOTEDATA (
+            Z_PK INTEGER PRIMARY KEY,
+            ZNOTE INTEGER,
+            ZDATA BLOB
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    result = get_note_content(conn, 999)
+    assert result is None
+    conn.close()

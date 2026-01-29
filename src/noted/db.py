@@ -236,3 +236,26 @@ def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummar
             folder_counts[row["folder"]] = row["count"]
 
     return NoteSummary(total_count=total, folder_counts=folder_counts)
+
+
+def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:
+    """Fetch raw ZDATA bytes for a note by ID.
+
+    Args:
+        conn: Database connection.
+        note_id: The Z_PK of the note (from list command).
+
+    Returns:
+        Raw gzip-compressed protobuf bytes, or None if not found.
+    """
+    query = """
+        SELECT nd.ZDATA
+        FROM ZICCLOUDSYNCINGOBJECT n
+        JOIN ZICNOTEDATA nd ON nd.ZNOTE = n.Z_PK
+        WHERE n.Z_PK = ?
+    """
+    cursor = conn.execute(query, (note_id,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return row["ZDATA"]
