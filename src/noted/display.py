@@ -1,11 +1,12 @@
 """Terminal display formatting using Rich."""
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
+from rich.table import Table as RichTable
 from rich.text import Text
 
-from noted.models import Note, NoteContent, NoteSummary
+from noted.models import Note, NoteContent, NoteSummary, Table
 
 console = Console()
 
@@ -20,7 +21,7 @@ def display_notes_table(notes: list[Note]) -> None:
         console.print("[yellow]No notes found.[/yellow]")
         return
 
-    table = Table(title="Notes", show_lines=False)
+    table = RichTable(title="Notes", show_lines=False)
     table.add_column("ID", style="dim", width=6)
     table.add_column("Title", style="bold")
     table.add_column("Folder", style="cyan")
@@ -52,7 +53,7 @@ def display_count(summary: NoteSummary) -> None:
 
     if summary.folder_counts:
         console.print("\n[bold]By folder:[/bold]")
-        table = Table(show_header=True, header_style="bold")
+        table = RichTable(show_header=True, header_style="bold")
         table.add_column("Folder")
         table.add_column("Count", justify="right")
 
@@ -107,3 +108,26 @@ def display_note_view(note: Note, content: NoteContent) -> None:
         console.print(content.text)
     else:
         console.print("[dim]No content[/dim]")
+
+
+def table_to_rich(table: Table) -> RichTable:
+    """Convert Table data to Rich Table for terminal display.
+
+    Args:
+        table: Parsed table data.
+
+    Returns:
+        Rich Table object ready for printing.
+    """
+    rich_table = RichTable(box=box.SIMPLE, show_header=False)
+
+    # Add columns
+    for _ in range(table.columns):
+        rich_table.add_column()
+
+    # Add rows
+    for row in range(table.rows):
+        row_data = [table.get_cell(row, col) for col in range(table.columns)]
+        rich_table.add_row(*row_data)
+
+    return rich_table

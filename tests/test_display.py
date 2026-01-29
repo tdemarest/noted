@@ -2,8 +2,13 @@
 
 from datetime import UTC, datetime
 
-from noted.display import display_count, display_note_view, display_notes_table
-from noted.models import Note, NoteContent, NoteSummary
+from noted.display import (
+    display_count,
+    display_note_view,
+    display_notes_table,
+    table_to_rich,
+)
+from noted.models import Note, NoteContent, NoteSummary, Table
 
 
 def test_display_notes_table_renders() -> None:
@@ -72,3 +77,22 @@ def test_display_note_view_no_folder() -> None:
 
     # Should not raise
     display_note_view(note, content)
+
+
+def test_table_to_rich() -> None:
+    """Test converting Table to Rich Table."""
+    table = Table(
+        rows=2,
+        columns=2,
+        cells={(0, 0): "A", (0, 1): "B", (1, 0): "C", (1, 1): "D"},
+    )
+    rich_table = table_to_rich(table)
+    # Rich Table should have 2 columns
+    assert len(rich_table.columns) == 2
+
+
+def test_table_to_rich_empty_cells() -> None:
+    """Test Rich table with missing cells shows empty."""
+    table = Table(rows=2, columns=2, cells={(0, 0): "Only"})
+    rich_table = table_to_rich(table)
+    assert len(rich_table.columns) == 2
