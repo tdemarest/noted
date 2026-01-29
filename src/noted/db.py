@@ -317,3 +317,26 @@ def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, st
     """
     cursor = conn.execute(query, (note_id,))
     return {row["ZIDENTIFIER"]: row["ZTITLE"] for row in cursor}
+
+
+def get_table_data(conn: sqlite3.Connection, identifier: str) -> bytes | None:
+    """Fetch ZMERGEABLEDATA1 for a table attachment by identifier.
+
+    Args:
+        conn: Database connection.
+        identifier: The attachment's unique identifier (UUID).
+
+    Returns:
+        Raw gzipped protobuf bytes, or None if not found.
+    """
+    query = """
+        SELECT ZMERGEABLEDATA1
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZIDENTIFIER = ?
+          AND ZMERGEABLEDATA1 IS NOT NULL
+    """
+    cursor = conn.execute(query, (identifier,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return row["ZMERGEABLEDATA1"]

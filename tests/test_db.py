@@ -13,6 +13,7 @@ from noted.db import (
     get_connection,
     get_note_by_id,
     get_note_content,
+    get_table_data,
 )
 
 
@@ -218,4 +219,58 @@ def test_get_note_by_id_not_found(tmp_path: Path) -> None:
 
     note = get_note_by_id(conn, 999)
     assert note is None
+    conn.close()
+
+
+def test_get_table_data(tmp_path: Path) -> None:
+    """Test fetching table data by identifier."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZMERGEABLEDATA1 BLOB
+        )
+    """)
+
+    test_data = b"\x1f\x8b\x08\x00table_data"
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZMERGEABLEDATA1)
+           VALUES (?, ?, ?, ?)""",
+        (1, "test-uuid", "com.apple.notes.table", test_data),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    result = get_table_data(conn, "test-uuid")
+    assert result == test_data
+    conn.close()
+
+
+def test_get_table_data_not_found(tmp_path: Path) -> None:
+    """Test fetching table data for non-existent identifier."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZMERGEABLEDATA1 BLOB
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    result = get_table_data(conn, "nonexistent")
+    assert result is None
     conn.close()
