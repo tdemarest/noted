@@ -80,7 +80,23 @@ def view(
         False,
         "--markdown",
         "-md",
-        help="Display note as rendered markdown.",
+        help="Output as raw markdown text.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Output as JSON.",
+    ),
+    json_styled: bool = typer.Option(
+        False,
+        "--json-styled",
+        help="Include styling metadata in JSON output.",
+    ),
+    html: bool = typer.Option(
+        False,
+        "--html",
+        help="Output as standalone HTML5 document.",
     ),
 ) -> None:
     """View the full content of a note."""
@@ -129,8 +145,12 @@ def view(
 
         conn.close()
 
-        # Display
-        if markdown:
+        # Display in requested format
+        if json_output or json_styled:
+            display.display_note_json(note, content, include_styling=json_styled)
+        elif html:
+            display.display_note_html(note, content)
+        elif markdown:
             display.display_note_markdown(note, content)
         else:
             display.display_note_view(note, content)
