@@ -282,7 +282,13 @@ def test_get_table_data_not_found(tmp_path: Path) -> None:
 
 
 def test_get_attachment_data(tmp_path: Path) -> None:
-    """Test fetching attachment binary data by identifier."""
+    """Test fetching attachment binary data by identifier.
+
+    Apple Notes stores attachments on disk. This test creates:
+    - Database with attachment and media records
+    - Mock file system structure
+    """
+    # Create database with attachment -> media relationship
     test_db = tmp_path / "NoteStore.sqlite"
     conn = sqlite3.connect(test_db)
 
@@ -292,29 +298,51 @@ def test_get_attachment_data(tmp_path: Path) -> None:
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
             ZTITLE TEXT,
-            ZDATA BLOB
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
 
-    test_data = b"\x89PNG\r\n\x1a\nfake_image_data"
+    # Insert media record (Z_PK=100) with identifier and filename
     conn.execute(
         """INSERT INTO ZICCLOUDSYNCINGOBJECT
-           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZDATA)
+           (Z_PK, ZIDENTIFIER, ZFILENAME)
+           VALUES (?, ?, ?)""",
+        (100, "media-uuid-456", "photo.png"),
+    )
+
+    # Insert attachment record (Z_PK=1) pointing to media
+    conn.execute(
+        """INSERT INTO ZICCLOUDSYNCINGOBJECT
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZMEDIA)
            VALUES (?, ?, ?, ?, ?)""",
-        (1, "test-uuid-123", "public.png", "photo.png", test_data),
+        (1, "test-uuid-123", "public.png", "My Photo", 100),
     )
     conn.commit()
     conn.close()
+
+    # Create mock file system structure
+    # NOTES_DIR/Accounts/<account>/Media/<media_id>/<subfolder>/<filename>
+    notes_dir = tmp_path / "notes"
+    media_path = (
+        notes_dir / "Accounts" / "test-account" / "Media" / "media-uuid-456" / "1_subfolder"
+    )
+    media_path.mkdir(parents=True)
+    test_data = b"\x89PNG\r\n\x1a\nfake_image_data"
+    (media_path / "photo.png").write_bytes(test_data)
 
     conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
-    result = get_attachment_data(conn, "test-uuid-123")
+
+    with patch("noted.db.NOTES_DIR", notes_dir):
+        result = get_attachment_data(conn, "test-uuid-123")
+
     assert result is not None
     assert result[0] == test_data
     assert result[1] == "public.png"
-    assert result[2] == "photo.png"
+    assert result[2] == "My Photo"
     conn.close()
 
 
@@ -328,7 +356,8 @@ def test_get_attachment_data_not_found(tmp_path: Path) -> None:
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
             ZTITLE TEXT,
-            ZDATA BLOB
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
     conn.commit()
@@ -338,13 +367,14 @@ def test_get_attachment_data_not_found(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
+
     result = get_attachment_data(conn, "nonexistent")
     assert result is None
     conn.close()
 
 
-def test_get_attachment_data_no_binary(tmp_path: Path) -> None:
-    """Test that attachments without ZDATA return None."""
+def test_get_attachment_data_no_media(tmp_path: Path) -> None:
+    """Test that attachments without media record return None."""
     test_db = tmp_path / "NoteStore.sqlite"
     conn = sqlite3.connect(test_db)
 
@@ -354,14 +384,15 @@ def test_get_attachment_data_no_binary(tmp_path: Path) -> None:
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
             ZTITLE TEXT,
-            ZDATA BLOB
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
 
-    # Insert attachment without binary data (like a table)
+    # Insert attachment without media link (like a table)
     conn.execute(
         """INSERT INTO ZICCLOUDSYNCINGOBJECT
-           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZDATA)
+           (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZMEDIA)
            VALUES (?, ?, ?, ?, ?)""",
         (1, "table-uuid", "com.apple.notes.table", None, None),
     )
@@ -372,6 +403,7 @@ def test_get_attachment_data_no_binary(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
+
     result = get_attachment_data(conn, "table-uuid")
     assert result is None
     conn.close()

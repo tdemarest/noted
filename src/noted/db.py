@@ -343,11 +343,52 @@ def get_table_data(conn: sqlite3.Connection, identifier: str) -> tuple[bytes, st
     return (row["ZMERGEABLEDATA1"], row["ZSUMMARY"] or "")
 
 
+def _find_media_file(media_identifier: str, filename: str) -> Path | None:
+    """Find a media file on disk by its identifier and filename.
+
+    Apple Notes stores attachments on disk, not in the database.
+    The path structure is:
+    NOTES_DIR/Accounts/<ACCOUNT_UUID>/Media/<MEDIA_ID>/<subfolder>/<filename>
+
+    Args:
+        media_identifier: The media record's ZIDENTIFIER (UUID).
+        filename: The filename from ZFILENAME.
+
+    Returns:
+        Path to the file if found, None otherwise.
+    """
+    accounts_dir = NOTES_DIR / "Accounts"
+    if not accounts_dir.exists():
+        return None
+
+    # Search through all account folders
+    for account_dir in accounts_dir.iterdir():
+        if not account_dir.is_dir():
+            continue
+        media_dir = account_dir / "Media" / media_identifier
+        if not media_dir.exists():
+            continue
+
+        # The file is in a subfolder (usually named 1_<UUID>)
+        for subfolder in media_dir.iterdir():
+            if not subfolder.is_dir():
+                continue
+            file_path = subfolder / filename
+            if file_path.exists():
+                return file_path
+
+    return None
+
+
 def get_attachment_data(
     conn: sqlite3.Connection,
     identifier: str,
 ) -> tuple[bytes, str, str | None] | None:
     """Fetch binary data for an attachment by identifier.
+
+    Apple Notes stores attachment files on disk, not in the database.
+    This function queries the database for file location info, then
+    reads the file from disk.
 
     Args:
         conn: Database connection.
@@ -355,16 +396,41 @@ def get_attachment_data(
 
     Returns:
         Tuple of (binary_data, type_uti, title), or None if not found
-        or attachment has no binary data.
+        or attachment has no binary data on disk.
     """
+    # Get attachment info and the linked media record
     query = """
-        SELECT ZDATA, ZTYPEUTI, ZTITLE
-        FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZIDENTIFIER = ?
-          AND ZDATA IS NOT NULL
+        SELECT
+            att.ZTYPEUTI,
+            att.ZTITLE as att_title,
+            media.ZIDENTIFIER as media_id,
+            media.ZFILENAME
+        FROM ZICCLOUDSYNCINGOBJECT att
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT media ON att.ZMEDIA = media.Z_PK
+        WHERE att.ZIDENTIFIER = ?
     """
     cursor = conn.execute(query, (identifier,))
     row = cursor.fetchone()
     if row is None:
         return None
-    return (row["ZDATA"], row["ZTYPEUTI"], row["ZTITLE"])
+
+    type_uti = row["ZTYPEUTI"]
+    att_title = row["att_title"]
+    media_id = row["media_id"]
+    filename = row["ZFILENAME"]
+
+    # If no media record or filename, can't find file
+    if not media_id or not filename:
+        return None
+
+    # Find the file on disk
+    file_path = _find_media_file(media_id, filename)
+    if file_path is None:
+        return None
+
+    # Read and return file contents
+    try:
+        binary_data = file_path.read_bytes()
+        return (binary_data, type_uti, att_title or filename)
+    except OSError:
+        return None

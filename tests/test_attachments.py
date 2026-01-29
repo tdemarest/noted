@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import py7zr
 
@@ -213,8 +214,13 @@ def test_generate_manifest(tmp_path: Path) -> None:
 
 
 def test_export_attachments_single_image(tmp_path: Path) -> None:
-    """Test exporting a single image attachment."""
-    # Set up test database
+    """Test exporting a single image attachment.
+
+    Apple Notes stores attachments on disk. This test creates:
+    - Database with attachment and media records
+    - Mock file system structure
+    """
+    # Set up test database with attachment -> media relationship
     test_db = tmp_path / "test.sqlite"
     conn = sqlite3.connect(test_db)
     conn.execute("""
@@ -223,16 +229,32 @@ def test_export_attachments_single_image(tmp_path: Path) -> None:
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
             ZTITLE TEXT,
-            ZDATA BLOB
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
-    image_data = b"\x89PNG\r\n\x1a\nfake_png_data"
+
+    # Insert media record (Z_PK=100)
     conn.execute(
-        "INSERT INTO ZICCLOUDSYNCINGOBJECT VALUES (?, ?, ?, ?, ?)",
-        (1, "img-uuid", "public.png", "photo.png", image_data),
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZFILENAME) VALUES (?, ?, ?)",
+        (100, "media-uuid", "photo.png"),
+    )
+
+    # Insert attachment record pointing to media
+    conn.execute(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZMEDIA) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (1, "img-uuid", "public.png", "photo.png", 100),
     )
     conn.commit()
     conn.close()
+
+    # Create mock file system structure
+    notes_dir = tmp_path / "notes"
+    media_path = notes_dir / "Accounts" / "test-account" / "Media" / "media-uuid" / "1_subfolder"
+    media_path.mkdir(parents=True)
+    image_data = b"\x89PNG\r\n\x1a\nfake_png_data"
+    (media_path / "photo.png").write_bytes(image_data)
 
     conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -241,14 +263,16 @@ def test_export_attachments_single_image(tmp_path: Path) -> None:
         Attachment(identifier="img-uuid", type_uti="public.png", title="photo.png"),
     ]
 
-    result = export_attachments(
-        conn=conn,
-        attachments=attachments,
-        output_dir=tmp_path,
-        base_name="TestNote",
-        note_id=1,
-        note_title="Test Note",
-    )
+    # Export with mocked NOTES_DIR
+    with patch("noted.db.NOTES_DIR", notes_dir):
+        result = export_attachments(
+            conn=conn,
+            attachments=attachments,
+            output_dir=tmp_path,
+            base_name="TestNote",
+            note_id=1,
+            note_title="Test Note",
+        )
 
     conn.close()
 
@@ -269,7 +293,10 @@ def test_export_attachments_single_image(tmp_path: Path) -> None:
 
 
 def test_export_attachments_skips_tables(tmp_path: Path) -> None:
-    """Test that table attachments are skipped."""
+    """Test that table attachments are skipped.
+
+    Tables are skipped based on their UTI type before any file lookup.
+    """
     test_db = tmp_path / "test.sqlite"
     conn = sqlite3.connect(test_db)
     conn.execute("""
@@ -278,12 +305,14 @@ def test_export_attachments_skips_tables(tmp_path: Path) -> None:
             ZIDENTIFIER TEXT,
             ZTYPEUTI TEXT,
             ZTITLE TEXT,
-            ZDATA BLOB
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
-    # Table has no ZDATA
+    # Table has no ZMEDIA - skipped by UTI type before file lookup
     conn.execute(
-        "INSERT INTO ZICCLOUDSYNCINGOBJECT VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZTITLE, ZMEDIA) "
+        "VALUES (?, ?, ?, ?, ?)",
         (1, "table-uuid", "com.apple.notes.table", None, None),
     )
     conn.commit()
@@ -319,7 +348,9 @@ def test_export_attachments_empty_list(tmp_path: Path) -> None:
     conn.execute("""
         CREATE TABLE ZICCLOUDSYNCINGOBJECT (
             Z_PK INTEGER PRIMARY KEY,
-            ZIDENTIFIER TEXT
+            ZIDENTIFIER TEXT,
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT
         )
     """)
     conn.commit()
