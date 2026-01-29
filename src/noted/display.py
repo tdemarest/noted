@@ -1,9 +1,11 @@
 """Terminal display formatting using Rich."""
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
-from noted.models import Note, NoteSummary
+from noted.models import Note, NoteContent, NoteSummary
 
 console = Console()
 
@@ -76,3 +78,32 @@ def display_success(message: str) -> None:
         message: Success message to display.
     """
     console.print(f"[bold green]Success:[/bold green] {message}")
+
+
+def display_note_view(note: Note, content: NoteContent) -> None:
+    """Display a note's full content.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+    """
+    # Format metadata line
+    folder_str = note.folder or "(No Folder)"
+    modified_str = note.modified.strftime("%Y-%m-%d %H:%M") if note.modified else "-"
+    subtitle = f"Folder: {folder_str}  |  Modified: {modified_str}"
+
+    # Create header panel
+    panel = Panel(
+        Text(subtitle, style="dim"),
+        title=f"[bold]{note.title}[/bold]",
+        title_align="left",
+        border_style="blue",
+    )
+    console.print(panel)
+    console.print()
+
+    # Print body text
+    if content.text:
+        console.print(content.text)
+    else:
+        console.print("[dim]No content[/dim]")
