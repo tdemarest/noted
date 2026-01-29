@@ -4,6 +4,7 @@ Handles extracting attachments from notes and exporting them to disk,
 with optional 7zip compression.
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,3 +71,35 @@ def uti_to_extension(uti: str) -> str:
         Returns '.bin' for unknown types.
     """
     return UTI_EXTENSION_MAP.get(uti, ".bin")
+
+
+def sanitize_filename(name: str) -> str:
+    """Sanitize a filename for safe filesystem use.
+
+    Removes or replaces characters that are invalid in filenames
+    on common operating systems (Windows, macOS, Linux).
+
+    Args:
+        name: Original filename.
+
+    Returns:
+        Sanitized filename safe for filesystem use.
+    """
+    if not name:
+        return "attachment"
+
+    # Replace spaces with underscores
+    result = name.replace(" ", "_")
+
+    # Remove characters invalid on Windows/macOS/Linux
+    # Invalid: / \ : * ? " < > |
+    result = re.sub(r'[/\\:*?"<>|]', "", result)
+
+    # Remove control characters
+    result = re.sub(r"[\x00-\x1f\x7f]", "", result)
+
+    # If nothing left, use default
+    if not result or result.strip(".") == "":
+        return "attachment"
+
+    return result

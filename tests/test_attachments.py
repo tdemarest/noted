@@ -1,6 +1,11 @@
 """Tests for noted.attachments."""
 
-from noted.attachments import AttachmentExportResult, ExportedAttachment, uti_to_extension
+from noted.attachments import (
+    AttachmentExportResult,
+    ExportedAttachment,
+    sanitize_filename,
+    uti_to_extension,
+)
 
 
 def test_exported_attachment_exported() -> None:
@@ -74,3 +79,33 @@ def test_uti_to_extension_drawing() -> None:
     """Test UTI to extension for Apple drawings."""
     assert uti_to_extension("com.apple.drawing") == ".png"
     assert uti_to_extension("com.apple.drawing.2") == ".png"
+
+
+def test_sanitize_filename_simple() -> None:
+    """Test sanitize_filename with normal filename."""
+    assert sanitize_filename("photo.jpg") == "photo.jpg"
+
+
+def test_sanitize_filename_spaces() -> None:
+    """Test sanitize_filename replaces spaces with underscores."""
+    assert sanitize_filename("my photo.jpg") == "my_photo.jpg"
+
+
+def test_sanitize_filename_special_chars() -> None:
+    """Test sanitize_filename removes special characters."""
+    assert sanitize_filename("file/with:bad*chars?.jpg") == "filewithbadchars.jpg"
+
+
+def test_sanitize_filename_unicode() -> None:
+    """Test sanitize_filename handles unicode."""
+    assert sanitize_filename("café_photo.jpg") == "café_photo.jpg"
+
+
+def test_sanitize_filename_empty() -> None:
+    """Test sanitize_filename with empty string."""
+    assert sanitize_filename("") == "attachment"
+
+
+def test_sanitize_filename_only_bad_chars() -> None:
+    """Test sanitize_filename with only bad characters."""
+    assert sanitize_filename("***") == "attachment"
