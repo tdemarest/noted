@@ -406,6 +406,57 @@ def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, st
     return {row["ZIDENTIFIER"]: row["ZTITLE"] for row in cursor}
 
 
+def get_attachment_stats(conn: sqlite3.Connection, note_id: int) -> dict[str, int | float]:
+    """Get attachment count and total size for a note.
+
+    Queries the database for all attachments linked to a note and calculates
+    total file size by checking actual files on disk. The ZFILESIZE column
+    in the database is often unpopulated, so we stat the files directly.
+
+    Args:
+        conn: Database connection.
+        note_id: The Z_PK of the note.
+
+    Returns:
+        Dictionary with 'count' (int) and 'total_size' (int, bytes).
+    """
+    # Get all attachments with their media info
+    query = """
+        SELECT
+            att.ZIDENTIFIER as att_id,
+            att.ZTYPEUTI as type_uti,
+            media.ZIDENTIFIER as media_id,
+            media.ZFILENAME as filename
+        FROM ZICCLOUDSYNCINGOBJECT att
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT media ON att.ZMEDIA = media.Z_PK
+        WHERE att.ZNOTE = ?
+          AND att.ZIDENTIFIER IS NOT NULL
+          AND att.ZTYPEUTI IS NOT NULL
+    """
+    cursor = conn.execute(query, (note_id,))
+    rows = cursor.fetchall()
+
+    count = len(rows)
+    total_size = 0
+
+    # Calculate total size from actual files on disk
+    for row in rows:
+        media_id = row["media_id"]
+        filename = row["filename"]
+        if media_id and filename:
+            file_path = _find_media_file(media_id, filename)
+            if file_path:
+                try:
+                    total_size += file_path.stat().st_size
+                except OSError:
+                    pass  # File not accessible, skip
+
+    return {
+        "count": count,
+        "total_size": total_size,
+    }
+
+
 def get_table_data(conn: sqlite3.Connection, identifier: str) -> tuple[bytes, str] | None:
     """Fetch ZMERGEABLEDATA1 and ZSUMMARY for a table attachment by identifier.
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from noted.display import (
+    _format_file_size,
     display_count,
     display_note_view,
     display_notes_table,
@@ -125,3 +126,30 @@ def test_display_warning() -> None:
         call_arg = mock_console.print.call_args[0][0]
         assert "Warning" in call_arg or "warning" in call_arg.lower()
         assert "Skipped 2 attachments" in call_arg
+
+
+def test_format_file_size_bytes() -> None:
+    """Test file size formatting for bytes."""
+    assert _format_file_size(0) == "0 B"
+    assert _format_file_size(512) == "512 B"
+    assert _format_file_size(1023) == "1023 B"
+
+
+def test_format_file_size_kilobytes() -> None:
+    """Test file size formatting for kilobytes."""
+    assert _format_file_size(1024) == "1.0 KB"
+    assert _format_file_size(1536) == "1.5 KB"
+    assert _format_file_size(1024 * 500) == "500.0 KB"
+
+
+def test_format_file_size_megabytes() -> None:
+    """Test file size formatting for megabytes."""
+    assert _format_file_size(1024 * 1024) == "1.0 MB"
+    assert _format_file_size(1024 * 1024 * 2.5) == "2.5 MB"
+    assert _format_file_size(1024 * 1024 * 100) == "100.0 MB"
+
+
+def test_format_file_size_gigabytes() -> None:
+    """Test file size formatting for gigabytes."""
+    assert _format_file_size(1024 * 1024 * 1024) == "1.0 GB"
+    assert _format_file_size(1024 * 1024 * 1024 * 3.5) == "3.5 GB"

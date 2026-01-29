@@ -104,6 +104,74 @@ def display_warning(message: str) -> None:
     console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
 
 
+def _format_file_size(size_bytes: int | float) -> str:
+    """Format a file size in bytes to human-readable string.
+
+    Args:
+        size_bytes: Size in bytes.
+
+    Returns:
+        Formatted string like "1.5 MB" or "256 KB".
+    """
+    if size_bytes == 0:
+        return "0 B"
+
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if abs(size) < 1024.0:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
+
+
+def display_debug_note_info(
+    note: Note,
+    attachment_stats: dict[str, int | float] | None = None,
+) -> None:
+    """Display debug information about a note.
+
+    Shows row ID, UUID, title, folder, timestamps, and attachment stats
+    in a formatted panel.
+
+    Args:
+        note: Note object with metadata.
+        attachment_stats: Optional dict with 'count' and 'total_size' keys.
+    """
+    from rich.table import Table as RichTable
+
+    table = RichTable(
+        title="[bold cyan]Debug: Note Info[/bold cyan]",
+        show_header=False,
+        box=box.SIMPLE,
+        title_justify="left",
+        padding=(0, 1),
+    )
+    table.add_column("Field", style="dim")
+    table.add_column("Value", style="bold")
+
+    table.add_row("Row ID", str(note.id))
+    table.add_row("UUID", note.identifier)
+    table.add_row("Title", note.title)
+    table.add_row("Folder", note.folder or "(No Folder)")
+    if note.created:
+        table.add_row("Created", note.created.strftime("%Y-%m-%d %H:%M:%S"))
+    if note.modified:
+        table.add_row("Modified", note.modified.strftime("%Y-%m-%d %H:%M:%S"))
+
+    # Add attachment stats if provided
+    if attachment_stats is not None:
+        count = attachment_stats.get("count", 0)
+        total_size = attachment_stats.get("total_size", 0)
+        table.add_row("Attachments", str(count))
+        if count > 0:
+            table.add_row("Attachment Size", _format_file_size(total_size))
+
+    console.print(table)
+    console.print()
+
+
 def display_note_view(note: Note, content: NoteContent) -> None:
     """Display a note's full content.
 

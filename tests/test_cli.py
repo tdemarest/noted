@@ -175,3 +175,229 @@ def test_view_attachments_flag_exports(tmp_path: Path) -> None:
     # Should create note file in tmp_path
     note_files = list(tmp_path.glob("*.md")) + list(tmp_path.glob("*.txt"))
     assert len(note_files) >= 1 or "Exported" in result.output
+
+
+def test_debug_option_shows_uuid() -> None:
+    """Test --debug option shows note UUID in output."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value={"count": 0, "total_size": 0}),
+    ):
+        result = runner.invoke(app, ["--debug", "view", "42"])
+
+    assert result.exit_code == 0
+    # Debug output should include the UUID
+    assert "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" in result.output
+
+
+def test_debug_short_option() -> None:
+    """Test -d short option works same as --debug."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value={"count": 0, "total_size": 0}),
+    ):
+        result = runner.invoke(app, ["-d", "view", "42"])
+
+    assert result.exit_code == 0
+    # Debug output should include the UUID
+    assert "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" in result.output
+
+
+def test_debug_shows_row_id() -> None:
+    """Test --debug option shows row ID."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value={"count": 0, "total_size": 0}),
+    ):
+        result = runner.invoke(app, ["--debug", "view", "42"])
+
+    assert result.exit_code == 0
+    # Debug should show the row ID
+    assert "42" in result.output or "Row ID" in result.output
+
+
+def test_debug_off_hides_uuid() -> None:
+    """Test that UUID is not shown without --debug."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+    ):
+        result = runner.invoke(app, ["view", "42"])
+
+    assert result.exit_code == 0
+    # Without debug, UUID should NOT be shown in output
+    assert "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" not in result.output
+
+
+def test_debug_shows_attachment_count() -> None:
+    """Test --debug shows attachment count."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    # Mock attachment stats
+    mock_stats = {"count": 3, "total_size": 1024 * 500}  # 500 KB
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["--debug", "view", "42"])
+
+    assert result.exit_code == 0
+    # Should show attachment count
+    assert "3" in result.output
+    assert "Attachment" in result.output
+
+
+def test_debug_shows_attachment_size() -> None:
+    """Test --debug shows total attachment size."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    # Mock attachment stats: 2.5 MB
+    mock_stats = {"count": 5, "total_size": 1024 * 1024 * 2.5}
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["--debug", "view", "42"])
+
+    assert result.exit_code == 0
+    # Should show size (formatted as MB or similar)
+    assert "MB" in result.output or "KB" in result.output or "2.5" in result.output
+
+
+def test_debug_zero_attachments() -> None:
+    """Test --debug handles notes with no attachments."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+
+    # Build valid protobuf
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    compressed = gzip.compress(root_proto)
+
+    # No attachments
+    mock_stats = {"count": 0, "total_size": 0}
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.get_attachment_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["--debug", "view", "42"])
+
+    assert result.exit_code == 0
+    # Should still show attachment info, even if 0
+    assert "Attachment" in result.output

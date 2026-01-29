@@ -5,7 +5,8 @@
       "WebFetch(domain:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(LOGURU_LEVEL=ERROR uv run python:*)"
+      "Bash(LOGURU_LEVEL=ERROR uv run python:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }

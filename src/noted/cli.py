@@ -1,17 +1,70 @@
 """CLI commands for noted using Typer."""
 
+import sys
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from loguru import logger
+from rich.console import Console
 
 from noted import db, display, protobuf, tables
+
+# Debug mode state (set by callback)
+_debug_mode = False
+
+console = Console(stderr=True)
+
+
+def _debug_callback(debug: bool) -> None:
+    """Configure logging based on debug flag.
+
+    Args:
+        debug: Whether debug mode is enabled.
+    """
+    global _debug_mode
+    _debug_mode = debug
+
+    # Remove default handler and reconfigure
+    logger.remove()
+    if debug:
+        logger.add(
+            sys.stderr,
+            level="DEBUG",
+            format="<dim>{time:HH:mm:ss}</dim> | <level>{level: <8}</level> | {message}",
+            colorize=True,
+        )
+    else:
+        logger.add(
+            sys.stderr,
+            level="WARNING",
+            format="<level>{level}</level>: {message}",
+            colorize=True,
+        )
+
 
 app = typer.Typer(
     name="noted",
     help="CLI tool for working with Apple Notes database.",
     no_args_is_help=True,
+    callback=lambda debug: _debug_callback(debug),
 )
+
+
+@app.callback()
+def main(
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug",
+            "-d",
+            help="Enable verbose debug output.",
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    """CLI tool for working with Apple Notes database."""
+    _debug_callback(debug)
 
 
 @app.command()
@@ -134,6 +187,11 @@ def view(
             display.display_error(f"Note '{note_ref}' not found.")
             conn.close()
             raise typer.Exit(code=1)
+
+        # Debug output: show note identifiers and attachment stats
+        if _debug_mode:
+            attachment_stats = db.get_attachment_stats(conn, note.id)
+            display.display_debug_note_info(note, attachment_stats)
 
         # Get note content using the resolved row ID
         raw_data = db.get_note_content(conn, note.id)

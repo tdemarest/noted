@@ -40,6 +40,24 @@ Each attachment record points to a **media record** via `ZMEDIA`. The media reco
 | `Z_PK` | INTEGER | Primary key (referenced by attachment's `ZMEDIA`) |
 | `ZIDENTIFIER` | TEXT | UUID used in file system path |
 | `ZFILENAME` | TEXT | Actual filename on disk |
+| `ZFILESIZE` | INTEGER | File size in bytes (often NULL—calculate from disk instead) |
+
+### Attachment Size Notes
+
+**Important findings about `ZFILESIZE`:**
+
+1. **`ZFILESIZE` is often unpopulated.** Despite the column existing in the database schema, it is frequently NULL even for attachments with physical files on disk. Testing shows 0 out of 3480 media records had `ZFILESIZE` populated.
+
+2. **Calculate sizes from disk instead.** To get accurate file sizes, stat the actual files on disk rather than relying on the database:
+   ```python
+   file_path = find_media_file(media_id, filename)
+   if file_path:
+       size = file_path.stat().st_size
+   ```
+
+3. **Inline attachments have no file size.** Non-exportable types like tables (`com.apple.notes.table`), links (`public.url`), and text attachments have `ZMEDIA = NULL`. These are rendered inline and don't occupy separate file storage.
+
+4. **A note with "8 attachments, 0 bytes" means all are inline types.** Tables, links, hashtags, and mentions have no physical files on disk.
 
 ## File System Structure
 
@@ -132,6 +150,39 @@ LEFT JOIN ZICCLOUDSYNCINGOBJECT media ON att.ZMEDIA = media.Z_PK
 WHERE att.ZNOTE = ?
   AND att.ZTYPEUTI IS NOT NULL
 ```
+
+Note: `media.ZFILESIZE` exists but is often NULL. Get file sizes from disk instead.
+
+### Get Attachment Statistics for a Note
+
+Since `ZFILESIZE` is often unpopulated, calculate sizes from disk:
+
+```python
+def get_attachment_stats(conn, note_id):
+    """Get attachment count and total size from disk."""
+    query = """
+        SELECT
+            media.ZIDENTIFIER as media_id,
+            media.ZFILENAME as filename
+        FROM ZICCLOUDSYNCINGOBJECT att
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT media ON att.ZMEDIA = media.Z_PK
+        WHERE att.ZNOTE = ?
+          AND att.ZIDENTIFIER IS NOT NULL
+          AND att.ZTYPEUTI IS NOT NULL
+    """
+    rows = conn.execute(query, (note_id,)).fetchall()
+
+    total_size = 0
+    for row in rows:
+        if row["media_id"] and row["filename"]:
+            file_path = find_media_file(row["media_id"], row["filename"])
+            if file_path:
+                total_size += file_path.stat().st_size
+
+    return {"count": len(rows), "total_size": total_size}
+```
+
+Note: `total_size` will be 0 if all attachments are inline types (tables, links, etc.).
 
 ### Get Attachment Names (for Display)
 
