@@ -398,6 +398,133 @@ def _reorder_columns_by_summary(table: Table, summary: str) -> Table:
     return Table(rows=table.rows, columns=table.columns, cells=new_cells)
 
 
+def _reorder_rows_by_summary(table: Table, summary: str) -> Table:
+    """Reorder table rows to match display order from ZSUMMARY.
+
+    ZSUMMARY contains all table cell values in display order. This function
+    finds first-column values in ZSUMMARY that match storage row values,
+    and uses the order of those matches to reorder rows.
+
+    For duplicate first-column values, it uses second-column values as
+    secondary keys for disambiguation.
+
+    Args:
+        table: Table with rows in storage order (columns already reordered).
+        summary: ZSUMMARY text with all cell values in display order.
+
+    Returns:
+        Table with rows reordered to display order.
+    """
+    if not summary or table.rows <= 2:  # Header + 0-1 data rows
+        return table
+
+    # Get all unique first-column values from storage rows
+    storage_first_cols: dict[str, list[int]] = {}
+    for row in range(1, table.rows):
+        first_col = (table.get_cell(row, 0) or "").strip()
+        if first_col not in storage_first_cols:
+            storage_first_cols[first_col] = []
+        storage_first_cols[first_col].append(row)
+
+    # Search ZSUMMARY for first-column values in display order
+    summary_lines = summary.split("\n")
+    num_cols = table.columns
+
+    # Skip header lines
+    data_lines = summary_lines[num_cols:]
+
+    # Find display order by scanning for first-column matches
+    # Use (first_col, col2, col3) tuple for disambiguation of duplicate keys
+    display_order: list[tuple[str, str, str]] = []
+    i = 0
+    while i < len(data_lines):
+        line = data_lines[i].strip()
+        if line in storage_first_cols:
+            # Found a first-column value - get columns 2 and 3 as secondary keys
+            col2 = data_lines[i + 1].strip() if i + 1 < len(data_lines) else ""
+            col3 = data_lines[i + 2].strip() if i + 2 < len(data_lines) else ""
+            display_order.append((line, col2, col3))
+        i += 1
+
+    if len(display_order) != table.rows - 1:
+        logger.debug(
+            f"Row reorder: found {len(display_order)} keys, expected {table.rows - 1}"
+        )
+        return table
+
+    # Build mapping using multiple columns for disambiguation
+    row_mapping: list[int] = []
+    used_storage_rows: set[int] = set()
+
+    for first_col, col2, col3 in display_order:
+        candidates = [
+            r for r in storage_first_cols.get(first_col, [])
+            if r not in used_storage_rows
+        ]
+
+        if not candidates:
+            logger.debug(f"Row reorder failed: no match for '{first_col}'")
+            return table
+
+        if len(candidates) == 1:
+            # Unique match
+            row_mapping.append(candidates[0])
+            used_storage_rows.add(candidates[0])
+        else:
+            # Multiple candidates - try columns 2 and 3 to disambiguate
+            found = False
+            for storage_row in candidates:
+                storage_col2 = (table.get_cell(storage_row, 1) or "").strip()
+                storage_col3 = (table.get_cell(storage_row, 2) or "").strip()
+
+                # Try matching on column 3 first (often more unique than column 2)
+                if storage_col3 == col3:
+                    row_mapping.append(storage_row)
+                    used_storage_rows.add(storage_row)
+                    found = True
+                    break
+
+            if not found:
+                # Try column 2
+                for storage_row in candidates:
+                    storage_col2 = (table.get_cell(storage_row, 1) or "").strip()
+                    if storage_col2 == col2:
+                        row_mapping.append(storage_row)
+                        used_storage_rows.add(storage_row)
+                        found = True
+                        break
+
+            if not found:
+                # Fall back to first available candidate
+                row_mapping.append(candidates[0])
+                used_storage_rows.add(candidates[0])
+
+    if len(row_mapping) != table.rows - 1:
+        logger.debug(
+            f"Row reorder incomplete: mapped {len(row_mapping)}, expected {table.rows - 1}"
+        )
+        return table
+
+    # Reorder cells: row 0 stays as header, data rows get reordered
+    new_cells: dict[tuple[int, int], str] = {}
+
+    # Copy header row (row 0)
+    for col in range(table.columns):
+        cell_value = table.get_cell(0, col)
+        if cell_value:
+            new_cells[(0, col)] = cell_value
+
+    # Copy data rows in display order
+    for display_row_idx, storage_row in enumerate(row_mapping):
+        new_row = display_row_idx + 1  # +1 because row 0 is header
+        for col in range(table.columns):
+            cell_value = table.get_cell(storage_row, col)
+            if cell_value:
+                new_cells[(new_row, col)] = cell_value
+
+    return Table(rows=table.rows, columns=table.columns, cells=new_cells)
+
+
 def _fallback_string_extraction(data: bytes) -> Table | None:
     """Fallback: extract any readable strings as table content.
 
@@ -462,6 +589,7 @@ def parse_table_data(data: bytes, summary: str = "") -> Table | None:
         table = _parse_mergeable_data_object(obj_data)
         if table and summary:
             table = _reorder_columns_by_summary(table, summary)
+            table = _reorder_rows_by_summary(table, summary)
         return table
 
     except Exception as e:

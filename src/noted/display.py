@@ -5,10 +5,20 @@ import re
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table as RichTable
 from rich.text import Text
 
-from noted.models import Note, NoteContent, NoteSummary, Table
+from noted.models import (
+    FormattedRun,
+    Note,
+    NoteContent,
+    NoteSummary,
+    ParagraphType,
+    Table,
+    TextAlignment,
+    TextStyle,
+)
 
 console = Console()
 
@@ -112,11 +122,210 @@ def display_note_view(note: Note, content: NoteContent) -> None:
             if att.table is not None:
                 table_lookup[att.identifier] = att.table
 
-    # Print body text with inline tables
-    if content.text:
+    # Use formatted rendering if available
+    if content.formatted_runs:
+        _render_formatted_content(content.formatted_runs, table_lookup)
+    elif content.text:
         _render_text_with_tables(content.text, table_lookup)
     else:
         console.print("[dim]No content[/dim]")
+
+
+def _render_formatted_content(
+    runs: list[FormattedRun],
+    table_lookup: dict[str, Table],
+) -> None:
+    """Render formatted content with rich styling.
+
+    Args:
+        runs: List of formatted text runs.
+        table_lookup: Mapping of table identifier to parsed Table.
+    """
+    # Table marker pattern
+    table_pattern = re.compile(r"\[Table:([^\]]+)\]")
+
+    # Track numbered list counter
+    numbered_list_count = 0
+    last_list_type: int | None = None
+
+    # First pass: collect runs into lines/paragraphs for better rendering
+    # Group consecutive runs by paragraph type for lists and special blocks
+    i = 0
+    while i < len(runs):
+        run = runs[i]
+        text = run.text
+        para = run.paragraph_style
+        style = run.text_style
+        para_type = para.paragraph_type if para else None
+
+        # Check for table markers
+        table_match = table_pattern.search(text)
+        if table_match:
+            identifier = table_match.group(1)
+            if identifier in table_lookup:
+                rich_table = table_to_rich(table_lookup[identifier])
+                console.print(rich_table)
+            else:
+                console.print("[Table]", end="")
+            i += 1
+            continue
+
+        # Handle code blocks - collect all consecutive code runs
+        if para_type == ParagraphType.MONOSPACE:
+            code_text = text
+            j = i + 1
+            while j < len(runs):
+                next_para = runs[j].paragraph_style
+                if next_para and next_para.paragraph_type == ParagraphType.MONOSPACE:
+                    code_text += runs[j].text
+                    j += 1
+                else:
+                    break
+            i = j
+            console.print(Syntax(code_text.rstrip(), "python", theme="monokai", line_numbers=False))
+            continue
+
+        # Handle block quotes - collect all consecutive quote runs
+        if para and para.is_quote:
+            quote_text = text
+            j = i + 1
+            while j < len(runs):
+                next_para = runs[j].paragraph_style
+                if next_para and next_para.is_quote:
+                    quote_text += runs[j].text
+                    j += 1
+                else:
+                    break
+            i = j
+            quote_panel = Panel(
+                Text(quote_text.strip(), style="italic"),
+                border_style="dim",
+                padding=(0, 2),
+            )
+            console.print(quote_panel)
+            continue
+
+        # Handle lists - collect runs until newline to form complete item
+        if para_type in (
+            ParagraphType.BULLET_LIST,
+            ParagraphType.DASHED_LIST,
+            ParagraphType.NUMBERED_LIST,
+            ParagraphType.CHECKLIST,
+        ):
+            # Collect all runs for this list item (until newline)
+            item_runs = [run]
+            j = i + 1
+            while j < len(runs) and "\n" not in runs[j - 1].text:
+                next_para = runs[j].paragraph_style
+                next_type = next_para.paragraph_type if next_para else None
+                if next_type == para_type:
+                    item_runs.append(runs[j])
+                    j += 1
+                else:
+                    break
+            i = j
+
+            # Build the item text with styling
+            item_text = Text()
+            for r in item_runs:
+                char_style = _get_char_style(r.text_style, r.link)
+                item_text.append(r.text, style=char_style or None)
+
+            # Determine indent and prefix
+            indent = "  " * (para.indent_level if para else 0)
+
+            if para_type == ParagraphType.BULLET_LIST:
+                prefix = f"{indent}• "
+                console.print(prefix, end="", style="cyan")
+                last_list_type = para_type
+            elif para_type == ParagraphType.DASHED_LIST:
+                prefix = f"{indent}– "
+                console.print(prefix, end="", style="cyan")
+                last_list_type = para_type
+            elif para_type == ParagraphType.NUMBERED_LIST:
+                # Track numbered list count
+                if last_list_type != ParagraphType.NUMBERED_LIST:
+                    numbered_list_count = 0
+                numbered_list_count += 1
+                prefix = f"{indent}{numbered_list_count}. "
+                console.print(prefix, end="", style="cyan")
+                last_list_type = para_type
+            elif para_type == ParagraphType.CHECKLIST:
+                # Check if paragraph is marked as checked
+                is_checked = para.is_checked if para else False
+                checkbox = "☑" if is_checked else "☐"
+                check_style = "green" if is_checked else "yellow"
+                console.print(f"{indent}{checkbox} ", end="", style=check_style)
+                if is_checked:
+                    item_text.stylize("dim strike")
+                last_list_type = para_type
+
+            # Print item text (remove trailing newline, we'll add it)
+            item_str = str(item_text).rstrip("\n")
+            item_text = Text(item_str)
+            for r in item_runs:
+                char_style = _get_char_style(r.text_style, r.link)
+                if char_style:
+                    # Re-apply styling after stripping
+                    pass
+            console.print(item_text)
+            continue
+
+        # Handle headings
+        if para_type == ParagraphType.TITLE:
+            console.print(text, style="bold magenta", end="")
+            i += 1
+            continue
+
+        if para_type == ParagraphType.HEADING:
+            console.print(text, style="bold cyan", end="")
+            i += 1
+            continue
+
+        if para_type == ParagraphType.SUBHEADING:
+            console.print(text, style="bold blue", end="")
+            i += 1
+            continue
+
+        # Regular text with character styling
+        char_style = _get_char_style(style, run.link)
+
+        # Handle alignment
+        if para and para.alignment == TextAlignment.CENTER:
+            console.print(text, style=char_style or None, justify="center", end="")
+        elif para and para.alignment == TextAlignment.RIGHT:
+            console.print(text, style=char_style or None, justify="right", end="")
+        else:
+            console.print(text, style=char_style or None, end="")
+
+        i += 1
+
+
+def _get_char_style(style: TextStyle | None, link: str | None) -> str:
+    """Build Rich style string from TextStyle.
+
+    Args:
+        style: Text styling info.
+        link: URL if this is a hyperlink.
+
+    Returns:
+        Rich style string like "bold italic underline".
+    """
+    parts = []
+    if style:
+        if style.bold:
+            parts.append("bold")
+        if style.italic:
+            parts.append("italic")
+        if style.underline:
+            parts.append("underline")
+        if style.strikethrough:
+            parts.append("strike")
+        if style.highlight:
+            parts.append("on yellow")
+    if link:
+        parts.append("blue underline")
+    return " ".join(parts)
 
 
 def _render_text_with_tables(text: str, table_lookup: dict[str, Table]) -> None:

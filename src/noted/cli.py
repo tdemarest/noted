@@ -105,8 +105,12 @@ def view(
         # Get attachment names for display
         attachment_names = db.get_attachment_names(conn, note_id)
 
-        # Parse content
-        content = protobuf.parse_note_data(raw_data, attachment_names)
+        # Parse content with formatting
+        content = protobuf.parse_note_data(
+            raw_data,
+            attachment_names,
+            include_formatting=True,
+        )
 
         # Parse table attachments
         if content.attachments:

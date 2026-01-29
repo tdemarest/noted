@@ -10,7 +10,8 @@ Key characteristics:
 - Tables are embedded as attachments with UTI `com.apple.notes.table`
 - Cell data is stored **column-by-column**, not row-by-row
 - Headers appear at the **end** of each column's cell range
-- The storage order of columns may differ from display order
+- The storage order of columns may differ from display order (SOLVED via ZSUMMARY)
+- The storage order of rows may differ from display order (SOLVED via ZSUMMARY)
 
 ## Protobuf Structure Hierarchy
 
@@ -124,7 +125,11 @@ Or equivalently, for 5 columns with 15 cells each:
 
 ## Storage Order vs Display Order
 
-**Important**: The storage order of columns in ZMERGEABLEDATA1 may not match the display order.
+**Important**: Both **columns** and **rows** in ZMERGEABLEDATA1 may have a storage order that differs from the display order.
+
+### Column Display Order (SOLVED)
+
+The storage order of columns may differ from display order.
 
 Example from note 12345:
 
@@ -136,9 +141,7 @@ Example from note 12345:
 | 3 | Service Desc | 3 | Performed By |
 | 4 | Miles | 4 | Service Desc |
 
-### Solution: ZSUMMARY Contains Display Order
-
-**Key discovery**: The `ZSUMMARY` column in `ZICCLOUDSYNCINGOBJECT` contains the column headers in **display order**, separated by newlines.
+**Solution**: The `ZSUMMARY` column in `ZICCLOUDSYNCINGOBJECT` contains the column headers in **display order**, separated by newlines.
 
 ```sql
 SELECT ZSUMMARY FROM ZICCLOUDSYNCINGOBJECT
@@ -147,9 +150,29 @@ WHERE ZTYPEUTI = 'com.apple.notes.table' AND ZNOTE = 12345;
 -- Result: "Date\nMiles\nCost\nPerformed By\nService Desc\n2025-12-..."
 ```
 
-The first N lines of ZSUMMARY (where N = number of columns) are the headers in display order. This can be used to reorder columns after extraction.
+The first N lines of ZSUMMARY (where N = number of columns) are the headers in display order.
 
-### Column Reordering Algorithm
+### Row Display Order (SOLVED)
+
+**Key discovery**: ZSUMMARY contains ALL table cell values in display order, not just headers!
+
+The ZSUMMARY structure is:
+- First N lines: Column headers in display order
+- Remaining lines: Cell values, N values per row, in display order
+
+This allows us to determine row display order by matching first-column values from ZSUMMARY against storage row values.
+
+**Algorithm**:
+1. Extract first-column values from ZSUMMARY in the order they appear
+2. For each first-column value, find the matching storage row
+3. For duplicate first-column values (e.g., two rows with same date), use secondary columns (columns 2 and 3) to disambiguate
+4. Reorder storage rows to match ZSUMMARY order
+
+Example from note 12345 - the two 2023-02-18 rows are distinguished by their Cost column:
+- First in ZSUMMARY: 2023-02-18 with empty Cost (window issue)
+- Second in ZSUMMARY: 2023-02-18 with Cost="$235..." (tire issue)
+
+### Column Reordering Algorithm (Implemented)
 
 ```python
 def reorder_columns(table: Table, summary: str) -> Table:
@@ -178,11 +201,11 @@ def reorder_columns(table: Table, summary: str) -> Table:
 
 ## Sample Table Data
 
-From note 12345 (Vehicle Service Record), the raw extracted data:
+From note 12345 (Vehicle Service Record):
 
-**Storage column order**: Date, Performed By, Cost, Service Desc, Miles
+### CLI Output (Now Matches Apple Notes Display Order)
 
-**Actual display order** (from Apple Notes UI):
+Both column and row ordering are now correct:
 
 | Date | Miles | Cost | Performed By | Service Desc |
 |------|-------|------|--------------|--------------|
@@ -191,11 +214,17 @@ From note 12345 (Vehicle Service Record), the raw extracted data:
 | 2025-10-08 | 14— | $0.00 | Quick Tire Shop | Right rear tire check low. Replaced valve |
 | 2025-06-09 | 11862 | $265.76 | Main Street Auto | 12k service (intermediate). Next, 18k, Dec 2025. |
 | 2025-06-02 | 11828 | $1430.04 | Quick Tire Shop | New tires - all-season tires (4). Install 2025-06-04 |
-| 2024-10-28 | | $90 | Myself | New wipers: Driver: PIAA 95065 Super Silicone Wiper Blade - 26" 650mm (Pack of 1) Passenger: PIAA 95040 Super Silicone Wiper Blade - 16" 400mm (Pack of 1). |
-| 2023-10-13 | 9324 | $373 | Main Street Auto | 12k mileage service (basic). Oil, tire rotation, inspection, air filter change. Right front tire is 10 but others are 7. This is about the limit. |
-| 2023-02-18 | 8829 | | | Driver window control panel - passenger window operation doesn't work. This is likely due to water from car wash that Main Street Auto did on 2023-02-03 service |
-| 2023-02-18 | 8829 | $235 tire + $24+$1.70+ $3, $35 tire certificate | Quick Tire Shop | Passenger Rear tire had a sidewall tear. Replace just one tire replacement tire - $235, add all 4 tires certificate (https://www.americastire.com/customer-service/certificates). Tire S/N DOT XXXXXXXXXX, registered with Quick Tire Shop on 20230222 |
+| 2024-10-28 | | $90 | Myself | New wipers: Driver: PIAA 95065 Super Silicone Wiper Blade - 26"... |
+| 2023-10-13 | 9324 | $373 | Main Street Auto | 12k mileage service (basic). Oil, tire rotation, inspection... |
+| 2023-02-18 | 8829 | | | Driver window control panel - passenger window operation doesn't work... |
+| 2023-02-18 | 8829 | $235 tire + $24+$1.70+ $3, $35 tire certificate | Quick Tire Shop | Passenger Rear tire had a sidewall tear... |
 | 2023-02-03 | 8065 | $201 | Main Street Auto | 9k service (basic), scheduled maintenance |
+| 2022-05-09 | 6999 | $5 | Self | Both key fob batteries replaced CR2032 |
+| 2020-03-11 | 6015 | $200.69 | Main Street Auto | 6K Maintenance (Regular Interval) |
+| 2019-05-30 | 3761 | $89.95 | Quick Lube | Oil change - Quick Lube |
+| 2019-01-11 | 1500 | $54.95 | Self | New wipers: Driver: PIAA 95065 Super Silicone Wiper Blade... |
+
+**Note**: Duplicate rows (e.g., two 2023-02-18 entries) are distinguished by comparing additional columns (Cost, Performed By) against ZSUMMARY values.
 
 ## Parsing Algorithm
 
@@ -273,7 +302,7 @@ Wire types 3, 4, 6, 7 are deprecated/reserved and should be skipped.
 ## Future Work
 
 1. ~~**Column ordering**: Parse `crColumns` ordered set to determine correct display order~~ **SOLVED**: Use ZSUMMARY column for display order
-2. **Row ordering**: Parse `crRows` ordered set for row display order (if different from storage)
+2. ~~**Row ordering**: Parse `crRows` ordered set for row display order~~ **SOLVED**: Use ZSUMMARY cell values to match and reorder rows
 3. **Empty cells**: Handle cells with no content (currently show as empty string)
 4. **Rich text**: Parse formatting within cells (bold, italic, links)
 5. **Merged cells**: Investigate if Apple Notes supports cell merging

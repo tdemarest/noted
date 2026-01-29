@@ -11,7 +11,13 @@ from typing import Any
 
 import betterproto
 
-from noted.models import Attachment, NoteContent
+from noted.models import (
+    Attachment,
+    FormattedRun,
+    NoteContent,
+    ParagraphStyle,
+    TextStyle,
+)
 
 # Gzip magic bytes
 GZIP_MAGIC = b"\x1f\x8b"
@@ -202,9 +208,170 @@ class NoteStoreProto(betterproto.Message):
     document: Document = betterproto.message_field(2)
 
 
+def _decode_varint(data: bytes, pos: int) -> tuple[int, int]:
+    """Decode a protobuf varint from data at position."""
+    result = 0
+    shift = 0
+    while pos < len(data):
+        b = data[pos]
+        result |= (b & 0x7F) << shift
+        pos += 1
+        if not (b & 0x80):
+            break
+        shift += 7
+    return result, pos
+
+
+def _decode_fields(data: bytes) -> dict[int, list[tuple[int, Any]]]:
+    """Decode all fields from protobuf data."""
+    fields: dict[int, list[tuple[int, Any]]] = {}
+    pos = 0
+    while pos < len(data):
+        if pos >= len(data):
+            break
+        tag, pos = _decode_varint(data, pos)
+        if tag == 0:
+            break
+        field_num = tag >> 3
+        wire_type = tag & 0x7
+        value: Any
+        if wire_type == 0:
+            value, pos = _decode_varint(data, pos)
+        elif wire_type == 2:
+            length, pos = _decode_varint(data, pos)
+            value = data[pos : pos + length]
+            pos += length
+        elif wire_type == 5:
+            value = data[pos : pos + 4]
+            pos += 4
+        elif wire_type == 1:
+            value = data[pos : pos + 8]
+            pos += 8
+        else:
+            break
+        if field_num not in fields:
+            fields[field_num] = []
+        fields[field_num].append((wire_type, value))
+    return fields
+
+
+def _extract_formatting(
+    decompressed: bytes,
+    text: str,
+) -> list[FormattedRun]:
+    """Extract formatting information from decompressed protobuf.
+
+    Uses raw protobuf decoding to access all formatting fields that
+    aren't covered by the betterproto schema.
+
+    Args:
+        decompressed: Decompressed protobuf bytes.
+        text: The note's plain text content.
+
+    Returns:
+        List of FormattedRun objects with formatting details.
+    """
+    formatted_runs: list[FormattedRun] = []
+
+    try:
+        top = _decode_fields(decompressed)
+        if 2 not in top:
+            return formatted_runs
+
+        doc = _decode_fields(top[2][0][1])
+        if 3 not in doc:
+            return formatted_runs
+
+        note = _decode_fields(doc[3][0][1])
+        if 5 not in note:
+            return formatted_runs
+
+        text_pos = 0
+        for _, run_data in note[5]:
+            if not isinstance(run_data, bytes):
+                continue
+
+            run = _decode_fields(run_data)
+
+            # Field 1: length
+            length = run[1][0][1] if 1 in run else 0
+            run_text = text[text_pos : text_pos + length] if text_pos + length <= len(text) else ""
+            text_pos += length
+
+            # Extract text styling (run-level fields)
+            text_style = TextStyle()
+            if 5 in run:
+                font_weight = run[5][0][1]
+                text_style.bold = font_weight in (1, 3)
+                text_style.italic = font_weight in (2, 3)
+            if 6 in run:
+                text_style.underline = run[6][0][1] == 1
+            if 7 in run:
+                text_style.strikethrough = run[7][0][1] == 1
+            if 14 in run:
+                text_style.highlight = run[14][0][1] == 1
+
+            # Extract paragraph style (field 2)
+            para_style = ParagraphStyle()
+            if 2 in run:
+                style_data = run[2][0][1]
+                if isinstance(style_data, bytes):
+                    style = _decode_fields(style_data)
+
+                    if 1 in style:
+                        para_style.paragraph_type = style[1][0][1]
+                    if 2 in style:
+                        para_style.alignment = style[2][0][1]
+                    if 3 in style:
+                        para_style.indent_level = style[3][0][1]
+                    if 4 in style:
+                        # style.4 is used for text indentation (not list indent)
+                        para_style.indent_level = max(
+                            para_style.indent_level,
+                            style[4][0][1],
+                        )
+                    if 5 in style:
+                        # style.5 is a message containing checked state for checklists
+                        # The checked flag is in field 2 of this nested message
+                        checked_data = style[5][0][1]
+                        if isinstance(checked_data, bytes):
+                            checked_msg = _decode_fields(checked_data)
+                            if 2 in checked_msg:
+                                para_style.is_checked = checked_msg[2][0][1] == 1
+                    if 7 in style:
+                        para_style.list_index = style[7][0][1]
+                    if 8 in style:
+                        para_style.is_quote = style[8][0][1] == 1
+
+            # Extract link (field 9)
+            link = None
+            if 9 in run:
+                val = run[9][0][1]
+                if isinstance(val, bytes):
+                    try:
+                        link = val.decode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+
+            formatted_runs.append(FormattedRun(
+                text=run_text,
+                length=length,
+                text_style=text_style,
+                paragraph_style=para_style,
+                link=link,
+            ))
+
+    except Exception:
+        # If formatting extraction fails, return empty list
+        pass
+
+    return formatted_runs
+
+
 def parse_note_data(
     data: bytes,
     attachment_names: dict[str, str] | None = None,
+    include_formatting: bool = False,
 ) -> NoteContent:
     """Parse gzip-compressed protobuf note data.
 
@@ -212,6 +379,7 @@ def parse_note_data(
         data: Gzip-compressed protobuf bytes from ZICNOTEDATA.ZDATA.
         attachment_names: Optional mapping of attachment identifier -> title.
             If provided, attachment markers will include the title.
+        include_formatting: If True, extract detailed formatting information.
 
     Returns:
         NoteContent with extracted plain text and attachment info.
@@ -236,4 +404,13 @@ def parse_note_data(
     if note.attribute_run:
         text, attachments = _process_attachments(text, note.attribute_run, attachment_names)
 
-    return NoteContent(text=text, attachments=attachments if attachments else None)
+    # Extract formatting if requested
+    formatted_runs = None
+    if include_formatting:
+        formatted_runs = _extract_formatting(decompressed, note.note_text or "")
+
+    return NoteContent(
+        text=text,
+        attachments=attachments if attachments else None,
+        formatted_runs=formatted_runs if formatted_runs else None,
+    )
