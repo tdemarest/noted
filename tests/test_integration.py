@@ -77,3 +77,36 @@ def test_view_command_integration() -> None:
     assert view_result.exit_code in (0, 1)
     if view_result.exit_code == 1:
         assert "locked" in view_result.output.lower() or "not found" in view_result.output.lower()
+
+
+@pytest.mark.skipif(not NOTES_DB_AVAILABLE, reason="Apple Notes database not available")
+def test_view_note_with_table() -> None:
+    """Integration test: view a note that contains a table."""
+    import sqlite3
+
+    # Find a note with a table
+    db_path = Path.home() / ".cache/noted/NoteStore.sqlite"
+    if not db_path.exists():
+        pytest.skip("Cached database not available")
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.execute("""
+        SELECT DISTINCT ZNOTE
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTYPEUTI = 'com.apple.notes.table'
+          AND ZMERGEABLEDATA1 IS NOT NULL
+        LIMIT 1
+    """)
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        pytest.skip("No notes with tables found")
+
+    note_id = str(row["ZNOTE"])
+    result = runner.invoke(app, ["view", note_id])
+
+    # Should succeed and not show raw [Table:xxx] markers (they should be rendered)
+    assert result.exit_code == 0
