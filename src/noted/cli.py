@@ -77,7 +77,7 @@ def refresh() -> None:
 
 @app.command()
 def view(
-    note_id: int = typer.Argument(..., help="Note ID to view (from list command)."),
+    note_ref: str = typer.Argument(..., help="Note ID or UUID to view (from list command)."),
     markdown: bool = typer.Option(
         False,
         "--markdown",
@@ -128,15 +128,15 @@ def view(
     try:
         conn = db.get_connection()
 
-        # Get note metadata
-        note = db.get_note_by_id(conn, note_id)
+        # Get note metadata (accepts either row ID or UUID)
+        note = db.get_note(conn, note_ref)
         if note is None:
-            display.display_error(f"Note with ID {note_id} not found.")
+            display.display_error(f"Note '{note_ref}' not found.")
             conn.close()
             raise typer.Exit(code=1)
 
-        # Get note content
-        raw_data = db.get_note_content(conn, note_id)
+        # Get note content using the resolved row ID
+        raw_data = db.get_note_content(conn, note.id)
 
         if raw_data is None:
             conn.close()
@@ -150,7 +150,7 @@ def view(
             raise typer.Exit(code=1)
 
         # Get attachment names for display
-        attachment_names = db.get_attachment_names(conn, note_id)
+        attachment_names = db.get_attachment_names(conn, note.id)
 
         # Parse content with formatting
         content = protobuf.parse_note_data(
@@ -213,8 +213,7 @@ def view(
                     attachments=content.attachments,
                     output_dir=base_path.parent,
                     base_name=base_path.name,
-                    note_id=note_id,
-                    note_title=note.title,
+                    note=note,
                 )
 
             conn.close()

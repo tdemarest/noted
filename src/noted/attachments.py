@@ -15,7 +15,7 @@ from pathlib import Path
 import py7zr
 
 from noted import db
-from noted.models import Attachment
+from noted.models import Attachment, Note
 
 
 @dataclass
@@ -171,8 +171,7 @@ def get_skip_reason(type_uti: str) -> str | None:
 
 def generate_manifest(
     manifest_path: Path,
-    note_id: int,
-    note_title: str,
+    note: Note,
     exported: list[ExportedAttachment],
     skipped: list[ExportedAttachment],
 ) -> None:
@@ -180,8 +179,7 @@ def generate_manifest(
 
     Args:
         manifest_path: Path to write manifest.json.
-        note_id: The note's database ID.
-        note_title: The note's title.
+        note: The note being exported.
         exported: List of successfully exported attachments.
         skipped: List of skipped attachments.
     """
@@ -208,8 +206,9 @@ def generate_manifest(
         )
 
     manifest = {
-        "note_id": note_id,
-        "note_title": note_title,
+        "note_id": note.id,
+        "note_identifier": note.identifier,
+        "note_title": note.title,
         "exported_at": datetime.now(UTC).isoformat(),
         "attachments": all_attachments,
     }
@@ -222,8 +221,7 @@ def export_attachments(
     attachments: list[Attachment],
     output_dir: Path,
     base_name: str,
-    note_id: int,
-    note_title: str,
+    note: Note,
 ) -> AttachmentExportResult:
     """Export all attachments for a note to disk.
 
@@ -236,8 +234,7 @@ def export_attachments(
         attachments: List of attachments from note content.
         output_dir: Parent directory for output.
         base_name: Base name for attachments directory.
-        note_id: Note's database ID for manifest.
-        note_title: Note's title for manifest.
+        note: The note being exported.
 
     Returns:
         AttachmentExportResult with lists of exported/skipped attachments.
@@ -321,7 +318,7 @@ def export_attachments(
 
     # Generate manifest
     manifest_path = attachments_dir / "manifest.json"
-    generate_manifest(manifest_path, note_id, note_title, exported, skipped)
+    generate_manifest(manifest_path, note, exported, skipped)
 
     return AttachmentExportResult(
         exported=exported,

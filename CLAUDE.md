@@ -59,29 +59,32 @@ uv run noted count
 uv run noted count --by-folder
 
 # View a note (rich terminal output)
-uv run noted view <note_id>
+# Accepts either row ID or UUID
+uv run noted view 42
+uv run noted view "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
 
 # View note as markdown
-uv run noted view <note_id> --markdown
+uv run noted view <id_or_uuid> --markdown
 
 # View note as JSON
-uv run noted view <note_id> --json
+uv run noted view <id_or_uuid> --json
 
 # View note as HTML
-uv run noted view <note_id> --html
+uv run noted view <id_or_uuid> --html
 
 # Export note to file (format auto-detected from flags)
-uv run noted view <note_id> --markdown -o ./my_note.md
+uv run noted view <id_or_uuid> --markdown -o ./my_note.md
 
 # Export note with attachments
-uv run noted view <note_id> --attachments
+uv run noted view <id_or_uuid> --attachments
 # Creates: ./Note_Title.md and ./Note_Title_attachments/
+# Manifest includes both note_id and note_identifier (UUID)
 
 # Export note with attachments to specific path
-uv run noted view <note_id> -a -o ./backup/my_note
+uv run noted view <id_or_uuid> -a -o ./backup/my_note
 
 # Export note and attachments as 7zip archive
-uv run noted view <note_id> --attachments --zip
+uv run noted view <id_or_uuid> --attachments --zip
 # Creates: ./Note_Title.7z
 
 # Force refresh cached database

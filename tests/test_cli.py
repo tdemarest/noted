@@ -18,6 +18,7 @@ def test_list_command() -> None:
     mock_notes = [
         Note(
             id=1,
+            identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
             title="Test Note",
             folder="Personal",
             created=datetime(2025, 1, 15, tzinfo=UTC),
@@ -76,6 +77,7 @@ def test_view_command_success() -> None:
     """Test view command with valid note."""
     mock_note = Note(
         id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
         title="Test Note",
         folder="Work",
         created=None,
@@ -90,7 +92,7 @@ def test_view_command_success() -> None:
 
     with (
         patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note", return_value=mock_note),
         patch("noted.cli.db.get_note_content", return_value=compressed),
     ):
         result = runner.invoke(app, ["view", "42"])
@@ -104,7 +106,7 @@ def test_view_command_not_found() -> None:
     """Test view command with non-existent note."""
     with (
         patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_note_by_id", return_value=None),
+        patch("noted.cli.db.get_note", return_value=None),
     ):
         result = runner.invoke(app, ["view", "999"])
 
@@ -116,6 +118,7 @@ def test_view_command_locked() -> None:
     """Test view command with locked note."""
     mock_note = Note(
         id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
         title="Secret Note",
         folder=None,
         created=None,
@@ -126,7 +129,7 @@ def test_view_command_locked() -> None:
 
     with (
         patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note", return_value=mock_note),
         patch("noted.cli.db.get_note_content", return_value=locked_data),
     ):
         result = runner.invoke(app, ["view", "42"])
@@ -146,6 +149,7 @@ def test_view_attachments_flag_exports(tmp_path: Path) -> None:
     """Test --attachments flag triggers export."""
     mock_note = Note(
         id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
         title="Test Note",
         folder="Work",
         created=None,
@@ -160,7 +164,7 @@ def test_view_attachments_flag_exports(tmp_path: Path) -> None:
 
     with (
         patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note", return_value=mock_note),
         patch("noted.cli.db.get_note_content", return_value=compressed),
         patch("noted.cli.db.get_attachment_names", return_value={}),
         patch("noted.cli.Path.cwd", return_value=tmp_path),

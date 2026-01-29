@@ -43,7 +43,7 @@ def test_view_help() -> None:
     """Test view command help."""
     result = runner.invoke(app, ["view", "--help"])
     assert result.exit_code == 0
-    assert "note_id" in result.output.lower()
+    assert "note_ref" in result.output.lower() or "note id or uuid" in result.output.lower()
 
 
 @pytest.mark.skipif(not NOTES_DB_AVAILABLE, reason="Apple Notes database not available")

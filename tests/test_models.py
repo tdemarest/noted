@@ -9,12 +9,14 @@ def test_note_creation() -> None:
     """Test Note dataclass creation."""
     note = Note(
         id=1,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
         title="Test Note",
         folder="Personal",
         created=datetime(2025, 1, 15, 10, 30),
         modified=datetime(2025, 1, 28, 14, 45),
     )
     assert note.id == 1
+    assert note.identifier == "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     assert note.title == "Test Note"
     assert note.folder == "Personal"
     assert note.created == datetime(2025, 1, 15, 10, 30)
@@ -25,6 +27,7 @@ def test_note_with_none_folder() -> None:
     """Test Note with no folder."""
     note = Note(
         id=2,
+        identifier="BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF",
         title="Orphan Note",
         folder=None,
         created=datetime(2025, 1, 1),

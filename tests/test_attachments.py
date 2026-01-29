@@ -18,7 +18,7 @@ from noted.attachments import (
     sanitize_filename,
     uti_to_extension,
 )
-from noted.models import Attachment
+from noted.models import Attachment, Note
 
 
 def test_exported_attachment_exported() -> None:
@@ -182,11 +182,19 @@ def test_generate_manifest(tmp_path: Path) -> None:
         ExportedAttachment("uuid-3", None, "com.apple.notes.table", False, "Rendered inline"),
     ]
 
+    note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+
     manifest_path = tmp_path / "manifest.json"
     generate_manifest(
         manifest_path,
-        note_id=42,
-        note_title="Test Note",
+        note=note,
         exported=exported,
         skipped=skipped,
     )
@@ -195,6 +203,7 @@ def test_generate_manifest(tmp_path: Path) -> None:
     data = json.loads(manifest_path.read_text())
 
     assert data["note_id"] == 42
+    assert data["note_identifier"] == "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     assert data["note_title"] == "Test Note"
     assert "exported_at" in data
     assert len(data["attachments"]) == 3
@@ -263,6 +272,15 @@ def test_export_attachments_single_image(tmp_path: Path) -> None:
         Attachment(identifier="img-uuid", type_uti="public.png", title="photo.png"),
     ]
 
+    note = Note(
+        id=1,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+
     # Export with mocked NOTES_DIR
     with patch("noted.db.NOTES_DIR", notes_dir):
         result = export_attachments(
@@ -270,8 +288,7 @@ def test_export_attachments_single_image(tmp_path: Path) -> None:
             attachments=attachments,
             output_dir=tmp_path,
             base_name="TestNote",
-            note_id=1,
-            note_title="Test Note",
+            note=note,
         )
 
     conn.close()
@@ -325,13 +342,21 @@ def test_export_attachments_skips_tables(tmp_path: Path) -> None:
         Attachment(identifier="table-uuid", type_uti="com.apple.notes.table"),
     ]
 
+    note = Note(
+        id=1,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+
     result = export_attachments(
         conn=conn,
         attachments=attachments,
         output_dir=tmp_path,
         base_name="TestNote",
-        note_id=1,
-        note_title="Test Note",
+        note=note,
     )
 
     conn.close()
@@ -359,13 +384,21 @@ def test_export_attachments_empty_list(tmp_path: Path) -> None:
     conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
 
+    note = Note(
+        id=1,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+
     result = export_attachments(
         conn=conn,
         attachments=[],
         output_dir=tmp_path,
         base_name="TestNote",
-        note_id=1,
-        note_title="Test Note",
+        note=note,
     )
 
     conn.close()

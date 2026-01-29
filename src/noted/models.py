@@ -10,6 +10,7 @@ class Note:
 
     Attributes:
         id: The Z_PK primary key from the database.
+        identifier: The UUID identifier (ZIDENTIFIER field).
         title: The note title (ZTITLE1 field).
         folder: The folder name, or None if not in a folder.
         created: When the note was created, or None if unknown.
@@ -17,6 +18,7 @@ class Note:
     """
 
     id: int
+    identifier: str
     title: str
     folder: str | None
     created: datetime | None

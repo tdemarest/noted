@@ -164,6 +164,7 @@ def test_get_note_by_id(tmp_path: Path) -> None:
     conn.execute("""
         CREATE TABLE ZICCLOUDSYNCINGOBJECT (
             Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
@@ -179,8 +180,9 @@ def test_get_note_by_id(tmp_path: Path) -> None:
         VALUES (1, 'Work')
     """)
     conn.execute("""
-        INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE)
-        VALUES (2, 'Test Note', 1, 758629800.0, 758629900.0)
+        INSERT INTO ZICCLOUDSYNCINGOBJECT
+        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE)
+        VALUES (2, 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE', 'Test Note', 1, 758629800.0, 758629900.0)
     """)
     conn.commit()
     conn.close()
@@ -191,6 +193,7 @@ def test_get_note_by_id(tmp_path: Path) -> None:
     note = get_note_by_id(conn, 2)
     assert note is not None
     assert note.id == 2
+    assert note.identifier == "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     assert note.title == "Test Note"
     assert note.folder == "Work"
     conn.close()
@@ -203,6 +206,7 @@ def test_get_note_by_id_not_found(tmp_path: Path) -> None:
     conn.execute("""
         CREATE TABLE ZICCLOUDSYNCINGOBJECT (
             Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,

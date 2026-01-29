@@ -19,6 +19,7 @@ def test_display_notes_table_renders() -> None:
     notes = [
         Note(
             id=1,
+            identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
             title="Test Note",
             folder="Personal",
             created=datetime(2025, 1, 15, 10, 30, tzinfo=UTC),
@@ -56,6 +57,7 @@ def test_display_note_view() -> None:
     """Test displaying a note with content."""
     note = Note(
         id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
         title="Test Note",
         folder="Work",
         created=datetime(2025, 1, 15, 10, 30, tzinfo=UTC),
@@ -71,6 +73,7 @@ def test_display_note_view_no_folder() -> None:
     """Test displaying a note without a folder."""
     note = Note(
         id=1,
+        identifier="BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF",
         title="Orphan Note",
         folder=None,
         created=datetime(2025, 1, 1, tzinfo=UTC),

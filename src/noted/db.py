@@ -151,6 +151,7 @@ def list_notes(
     query = """
         SELECT
             n.Z_PK as id,
+            n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
             n.ZCREATIONDATE as created,
@@ -178,6 +179,7 @@ def list_notes(
         notes.append(
             Note(
                 id=row["id"],
+                identifier=row["identifier"] or "",
                 title=row["title"] or "(Untitled)",
                 folder=row["folder"],
                 created=apple_timestamp_to_datetime(row["created"]),
@@ -239,7 +241,7 @@ def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummar
 
 
 def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:
-    """Fetch raw ZDATA bytes for a note by ID.
+    """Fetch raw ZDATA bytes for a note by row ID.
 
     Args:
         conn: Database connection.
@@ -261,8 +263,31 @@ def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:
     return row["ZDATA"]
 
 
+def get_note_content_by_identifier(conn: sqlite3.Connection, identifier: str) -> bytes | None:
+    """Fetch raw ZDATA bytes for a note by UUID identifier.
+
+    Args:
+        conn: Database connection.
+        identifier: The ZIDENTIFIER (UUID) of the note.
+
+    Returns:
+        Raw gzip-compressed protobuf bytes, or None if not found.
+    """
+    query = """
+        SELECT nd.ZDATA
+        FROM ZICCLOUDSYNCINGOBJECT n
+        JOIN ZICNOTEDATA nd ON nd.ZNOTE = n.Z_PK
+        WHERE n.ZIDENTIFIER = ?
+    """
+    cursor = conn.execute(query, (identifier,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return row["ZDATA"]
+
+
 def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
-    """Fetch a single note by its ID.
+    """Fetch a single note by its database row ID.
 
     Args:
         conn: Database connection.
@@ -274,6 +299,7 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
     query = """
         SELECT
             n.Z_PK as id,
+            n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
             n.ZCREATIONDATE as created,
@@ -290,11 +316,72 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
         return None
     return Note(
         id=row["id"],
+        identifier=row["identifier"] or "",
         title=row["title"] or "(Untitled)",
         folder=row["folder"],
         created=apple_timestamp_to_datetime(row["created"]),
         modified=apple_timestamp_to_datetime(row["modified"]),
     )
+
+
+def get_note_by_identifier(conn: sqlite3.Connection, identifier: str) -> Note | None:
+    """Fetch a single note by its UUID identifier.
+
+    Args:
+        conn: Database connection.
+        identifier: The ZIDENTIFIER (UUID) of the note.
+
+    Returns:
+        Note object, or None if not found.
+    """
+    query = """
+        SELECT
+            n.Z_PK as id,
+            n.ZIDENTIFIER as identifier,
+            n.ZTITLE1 as title,
+            f.ZTITLE2 as folder,
+            n.ZCREATIONDATE as created,
+            n.ZMODIFICATIONDATE as modified
+        FROM ZICCLOUDSYNCINGOBJECT n
+        LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+        WHERE n.ZIDENTIFIER = ?
+          AND n.ZTITLE1 IS NOT NULL
+          AND n.ZMARKEDFORDELETION != 1
+    """
+    cursor = conn.execute(query, (identifier,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return Note(
+        id=row["id"],
+        identifier=row["identifier"] or "",
+        title=row["title"] or "(Untitled)",
+        folder=row["folder"],
+        created=apple_timestamp_to_datetime(row["created"]),
+        modified=apple_timestamp_to_datetime(row["modified"]),
+    )
+
+
+def get_note(conn: sqlite3.Connection, note_ref: str) -> Note | None:
+    """Fetch a note by either row ID or UUID identifier.
+
+    Accepts either a numeric row ID or a UUID string.
+
+    Args:
+        conn: Database connection.
+        note_ref: Either a numeric ID (e.g., "42") or UUID
+            (e.g., "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE").
+
+    Returns:
+        Note object, or None if not found.
+    """
+    # Try parsing as integer first
+    try:
+        note_id = int(note_ref)
+        return get_note_by_id(conn, note_id)
+    except ValueError:
+        # Not an integer, try as UUID
+        return get_note_by_identifier(conn, note_ref)
 
 
 def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, str]:
