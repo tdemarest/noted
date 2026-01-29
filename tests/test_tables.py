@@ -1,7 +1,11 @@
 """Tests for noted.tables."""
 
 import gzip
+import sqlite3
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from noted.tables import decode_fields, decode_varint, parse_table_data
 
@@ -47,3 +51,32 @@ def test_parse_table_data_returns_none_for_empty() -> None:
     empty_gzip = gzip.compress(b"")
     result = parse_table_data(empty_gzip)
     assert result is None
+
+
+def test_parse_table_data_with_real_structure() -> None:
+    """Test parsing table with multiple columns detected."""
+    db_path = Path.home() / ".cache/noted/NoteStore.sqlite"
+    if not db_path.exists():
+        pytest.skip("Apple Notes database not available")
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.execute("""
+        SELECT ZMERGEABLEDATA1
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTYPEUTI = 'com.apple.notes.table'
+          AND ZMERGEABLEDATA1 IS NOT NULL
+        LIMIT 1
+    """)
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        pytest.skip("No tables found in database")
+
+    result = parse_table_data(row["ZMERGEABLEDATA1"])
+    assert result is not None
+    assert result.rows > 0
+    assert result.columns > 0
+    assert len(result.cells) > 0

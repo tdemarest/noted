@@ -83,6 +83,54 @@ def decode_fields(data: bytes) -> dict[int, list[tuple[int, Any]]]:
     return fields
 
 
+# Known CRDT metadata strings to filter out
+_CRDT_NOISE = frozenset({
+    "identity",
+    "dentity",  # Partial match
+    "cellColumns",
+    "UUIDIndex",
+    "UIDI",  # Partial match
+    "crRows",
+    "crTableColumnDirection",
+    "self",
+    "crColumns",
+    "CRTableColumnDirectionLeftToRight",
+})
+
+# Substrings that indicate CRDT noise
+_CRDT_SUBSTRINGS = (
+    "CRDT",
+    "CRTable",
+    "LeftToRight",
+    "00000000-0000-0000",
+)
+
+
+def _is_crdt_noise(s: str) -> bool:
+    """Check if string is CRDT metadata noise."""
+    # Exact matches
+    if s in _CRDT_NOISE:
+        return True
+    # Substring matches
+    for noise in _CRDT_SUBSTRINGS:
+        if noise in s:
+            return True
+    # Prefix matches
+    if s.startswith("com.apple."):
+        return True
+    # Very short garbage
+    if len(s) <= 3:
+        return True
+    # Starts with non-printable looking characters
+    if s[0] in '&"#$%' and len(s) > 1 and s[1] in '&"#$%0123456789':
+        return True
+    # Binary-looking garbage (multiple non-printable-like chars)
+    non_alpha = sum(1 for c in s if not c.isalnum() and c not in " .-$(),/:@\n")
+    if non_alpha > len(s) * 0.3 and len(s) < 20:
+        return True
+    return False
+
+
 def _extract_strings_from_data(data: bytes) -> list[str]:
     """Extract readable strings from binary data.
 
@@ -102,14 +150,59 @@ def _extract_strings_from_data(data: bytes) -> list[str]:
             current.append(chr(b))
         else:
             if len(current) > 3:
-                s = "".join(current)
-                # Filter out protobuf type names
-                if not s.startswith("com.apple.") and "CRDT" not in s:
+                s = "".join(current).strip()
+                if s and not _is_crdt_noise(s):
                     strings.append(s)
             current = []
 
     if len(current) > 3:
-        strings.append("".join(current))
+        s = "".join(current).strip()
+        if s and not _is_crdt_noise(s):
+            strings.append(s)
+
+    return strings
+
+
+def _extract_strings_recursive(
+    data: bytes, depth: int = 0, max_depth: int = 5
+) -> list[str]:
+    """Recursively decode protobuf and extract strings.
+
+    Args:
+        data: Binary protobuf data.
+        depth: Current recursion depth.
+        max_depth: Maximum recursion depth.
+
+    Returns:
+        List of extracted cell strings.
+    """
+    if depth > max_depth or len(data) < 5:
+        return []
+
+    strings: list[str] = []
+    try:
+        fields = decode_fields(data)
+        for field_num, vals in fields.items():
+            for wire_type, val in vals:
+                if not isinstance(val, bytes):
+                    continue
+
+                # Try to decode as UTF-8 string
+                try:
+                    s = val.decode("utf-8").strip()
+                    if s and len(s) > 1 and not _is_crdt_noise(s):
+                        # Check if it looks like readable text
+                        printable = sum(1 for c in s if c.isprintable() or c in "\n\t")
+                        if printable > len(s) * 0.8:
+                            strings.append(s)
+                except UnicodeDecodeError:
+                    pass
+
+                # Recurse into length-delimited fields
+                if wire_type == 2 and len(val) > 5:
+                    strings.extend(_extract_strings_recursive(val, depth + 1))
+    except Exception:
+        pass
 
     return strings
 
@@ -135,6 +228,13 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
                 except UnicodeDecodeError:
                     key_items.append("")
 
+    # Find index for crColumns (used for grid detection)
+    cr_cols_idx = -1
+    for i, key in enumerate(key_items):
+        if key == "crColumns":
+            cr_cols_idx = i
+            break
+
     # Field 6 = uuid_item (row/column identifiers)
     uuid_items: list[bytes] = []
     if 6 in obj:
@@ -142,41 +242,50 @@ def _parse_mergeable_data_object(obj_data: bytes) -> Table | None:
             if isinstance(val, bytes):
                 uuid_items.append(val)
 
-    # Field 3 = table_object entries containing cell data
-    # Extract all readable strings as cell candidates
-    cells: dict[tuple[int, int], str] = {}
-    cell_strings: list[str] = []
+    # Extract strings using recursive method
+    cell_strings = _extract_strings_recursive(obj_data)
 
-    if 3 in obj:
-        for _, entry_data in obj[3]:
-            if isinstance(entry_data, bytes):
-                # Look for string content in entries
-                entry = decode_fields(entry_data)
-                # Field 9 typically contains string values
-                if 9 in entry:
-                    for _, val in entry[9]:
-                        if isinstance(val, bytes):
-                            try:
-                                s = val.decode("utf-8")
-                                if s.strip():
-                                    cell_strings.append(s)
-                            except UnicodeDecodeError:
-                                pass
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_strings: list[str] = []
+    for s in cell_strings:
+        if s not in seen:
+            seen.add(s)
+            unique_strings.append(s)
 
-    # If structured parsing found no cells, try string extraction
-    if not cell_strings:
-        cell_strings = _extract_strings_from_data(obj_data)
+    if not unique_strings:
+        # Fallback to simple extraction
+        unique_strings = _extract_strings_from_data(obj_data)
 
-    if not cell_strings:
+    if not unique_strings:
         return None
 
-    # Heuristic: arrange strings in a simple grid
-    # Count rows by looking for date patterns or other structure
-    # For now, create a single-column table
-    for i, s in enumerate(cell_strings):
-        cells[(i, 0)] = s
+    # Try to detect grid structure by looking for patterns
+    # Heuristic: if we have row/column UUIDs, use their count
+    num_cols = 1
+    if cr_cols_idx >= 0 and 3 in obj:
+        # Count unique column references
+        # For now, use a simple heuristic based on UUID count
+        if len(uuid_items) >= 4:
+            # Likely multi-column - estimate based on string count patterns
+            # Try common column counts
+            for try_cols in [4, 3, 2, 5, 6]:
+                if len(unique_strings) % try_cols == 0 and len(unique_strings) >= try_cols:
+                    num_cols = try_cols
+                    break
 
-    return Table(rows=len(cell_strings), columns=1, cells=cells)
+    num_rows = len(unique_strings) // num_cols if num_cols > 0 else len(unique_strings)
+    if num_rows * num_cols < len(unique_strings):
+        num_rows += 1
+
+    # Arrange strings in grid (row-major order)
+    cells: dict[tuple[int, int], str] = {}
+    for i, s in enumerate(unique_strings):
+        row = i // num_cols
+        col = i % num_cols
+        cells[(row, col)] = s
+
+    return Table(rows=num_rows, columns=num_cols, cells=cells)
 
 
 def _fallback_string_extraction(data: bytes) -> Table | None:
