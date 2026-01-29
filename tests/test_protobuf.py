@@ -95,9 +95,12 @@ def test_parse_note_replaces_attachment_placeholders() -> None:
         MockAttributeRun(6, None),  # " world"
     ]
 
-    result = _process_attachments(text, runs)
-    assert "\ufffc" not in result
-    assert "[Image]" in result
+    result_text, attachments = _process_attachments(text, runs)
+    assert "\ufffc" not in result_text
+    assert "[Image]" in result_text
+    assert len(attachments) == 1
+    assert attachments[0].identifier == "abc123"
+    assert attachments[0].type_uti == "public.jpeg"
 
 
 def test_parse_note_handles_multiple_attachments() -> None:
@@ -125,6 +128,35 @@ def test_parse_note_handles_multiple_attachments() -> None:
         MockAttributeRun(1, None),  # "C"
     ]
 
-    result = _process_attachments(text, runs)
-    assert result.count("[") == 2  # Two attachment markers
-    assert "\ufffc" not in result
+    result_text, attachments = _process_attachments(text, runs)
+    assert result_text.count("[") == 2  # Two attachment markers
+    assert "\ufffc" not in result_text
+    assert len(attachments) == 2
+
+
+def test_parse_note_with_attachment_names() -> None:
+    """Test that attachment names are included when provided."""
+    from noted.protobuf import _process_attachments
+
+    text = "See: \ufffc"
+
+    class MockAttachmentInfo:
+        attachment_identifier: str = "uuid-123"
+        type_uti: str = "com.adobe.pdf"
+
+    class MockAttributeRun:
+        def __init__(self, length: int, attachment_info: object = None) -> None:
+            self.length = length
+            self.attachment_info = attachment_info
+
+    runs = [
+        MockAttributeRun(5, None),  # "See: "
+        MockAttributeRun(1, MockAttachmentInfo()),  # U+FFFC
+    ]
+
+    # With attachment names provided
+    names = {"uuid-123": "report.pdf"}
+    result_text, attachments = _process_attachments(text, runs, names)
+
+    assert "[PDF: report.pdf]" in result_text
+    assert attachments[0].title == "report.pdf"

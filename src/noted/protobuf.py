@@ -11,7 +11,7 @@ from typing import Any
 
 import betterproto
 
-from noted.models import NoteContent
+from noted.models import Attachment, NoteContent
 
 # Gzip magic bytes
 GZIP_MAGIC = b"\x1f\x8b"
@@ -57,35 +57,56 @@ def _uti_to_type(uti: str) -> str:
 def _process_attachments(
     text: str,
     attribute_runs: list[Any],
-) -> str:
+    attachment_names: dict[str, str] | None = None,
+) -> tuple[str, list[Attachment]]:
     """Replace attachment placeholders with human-readable markers.
 
     Apple Notes uses U+FFFC (Object Replacement Character) as a placeholder
     for embedded attachments. This function replaces those with markers like
-    [Image] or [PDF] based on the attachment's UTI type.
+    [Image: filename.jpg] or [PDF] based on the attachment's UTI type.
 
     Args:
         text: The note text containing U+FFFC placeholders.
         attribute_runs: List of AttributeRun objects with attachment info.
+        attachment_names: Optional mapping of identifier -> title for attachments.
 
     Returns:
-        Text with attachment placeholders replaced by markers.
+        Tuple of (processed text, list of Attachment objects found).
     """
+    attachments: list[Attachment] = []
+
     if not attribute_runs or OBJECT_REPLACEMENT_CHAR not in text:
-        return text
+        return text, attachments
 
     result = []
     text_pos = 0
+    names = attachment_names or {}
 
     for run in attribute_runs:
         run_length = run.length
         run_text = text[text_pos : text_pos + run_length]
 
         if run.attachment_info and OBJECT_REPLACEMENT_CHAR in run_text:
+            # Get attachment details
+            info = run.attachment_info
+            identifier = getattr(info, "attachment_identifier", "") or ""
+            uti = getattr(info, "type_uti", "") or ""
+            title = names.get(identifier)
+
+            # Create Attachment object
+            attachments.append(Attachment(
+                identifier=identifier,
+                type_uti=uti,
+                title=title,
+            ))
+
             # Replace U+FFFC with attachment marker
-            uti = getattr(run.attachment_info, "type_uti", "") or ""
             type_name = _uti_to_type(uti)
-            run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, f"[{type_name}]")
+            if title:
+                marker = f"[{type_name}: {title}]"
+            else:
+                marker = f"[{type_name}]"
+            run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, marker)
 
         result.append(run_text)
         text_pos += run_length
@@ -94,7 +115,7 @@ def _process_attachments(
     if text_pos < len(text):
         result.append(text[text_pos:])
 
-    return "".join(result)
+    return "".join(result), attachments
 
 
 def is_note_locked(data: bytes | None) -> bool:
@@ -178,15 +199,21 @@ class NoteStoreProto(betterproto.Message):
     document: Document = betterproto.message_field(2)
 
 
-def parse_note_data(data: bytes) -> NoteContent:
+def parse_note_data(
+    data: bytes,
+    attachment_names: dict[str, str] | None = None,
+) -> NoteContent:
     """Parse gzip-compressed protobuf note data.
 
     Args:
         data: Gzip-compressed protobuf bytes from ZICNOTEDATA.ZDATA.
+        attachment_names: Optional mapping of attachment identifier -> title.
+            If provided, attachment markers will include the title.
 
     Returns:
-        NoteContent with extracted plain text. Attachment placeholders
-        (U+FFFC) are replaced with markers like [Image] or [PDF].
+        NoteContent with extracted plain text and attachment info.
+        Attachment placeholders (U+FFFC) are replaced with markers
+        like [Image: photo.jpg] or [PDF].
 
     Raises:
         gzip.BadGzipFile: If data is not valid gzip.
@@ -200,9 +227,10 @@ def parse_note_data(data: bytes) -> NoteContent:
 
     note = proto.document.note
     text = note.note_text or ""
+    attachments: list[Attachment] = []
 
     # Replace attachment placeholders with human-readable markers
     if note.attribute_run:
-        text = _process_attachments(text, note.attribute_run)
+        text, attachments = _process_attachments(text, note.attribute_run, attachment_names)
 
-    return NoteContent(text=text)
+    return NoteContent(text=text, attachments=attachments if attachments else None)

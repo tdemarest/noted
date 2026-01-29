@@ -295,3 +295,25 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
         created=apple_timestamp_to_datetime(row["created"]),
         modified=apple_timestamp_to_datetime(row["modified"]),
     )
+
+
+def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, str]:
+    """Fetch attachment identifiers and titles for a note.
+
+    Args:
+        conn: Database connection.
+        note_id: The Z_PK of the note.
+
+    Returns:
+        Mapping of attachment identifier (UUID) to title/filename.
+        Only includes attachments that have a title.
+    """
+    query = """
+        SELECT ZIDENTIFIER, ZTITLE
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZNOTE = ?
+          AND ZIDENTIFIER IS NOT NULL
+          AND ZTITLE IS NOT NULL
+    """
+    cursor = conn.execute(query, (note_id,))
+    return {row["ZIDENTIFIER"]: row["ZTITLE"] for row in cursor}

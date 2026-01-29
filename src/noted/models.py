@@ -37,11 +37,28 @@ class NoteSummary:
 
 
 @dataclass
+class Attachment:
+    """Represents an embedded attachment in a note.
+
+    Attributes:
+        identifier: Unique identifier (UUID) for the attachment.
+        type_uti: Uniform Type Identifier (e.g., 'public.jpeg').
+        title: Display name/filename of the attachment, if known.
+    """
+
+    identifier: str
+    type_uti: str
+    title: str | None = None
+
+
+@dataclass
 class NoteContent:
     """Parsed content of an Apple Note.
 
     Attributes:
         text: The plain text content extracted from protobuf.
+        attachments: List of embedded attachments found in the note.
     """
 
     text: str
+    attachments: list[Attachment] | None = None

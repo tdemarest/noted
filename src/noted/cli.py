@@ -90,19 +90,24 @@ def view(
 
         # Get note content
         raw_data = db.get_note_content(conn, note_id)
-        conn.close()
 
         if raw_data is None:
+            conn.close()
             display.display_error("Note has no content.")
             raise typer.Exit(code=1)
 
         # Check if locked
         if protobuf.is_note_locked(raw_data):
+            conn.close()
             display.display_error("Note is locked and cannot be read.")
             raise typer.Exit(code=1)
 
+        # Get attachment names for display
+        attachment_names = db.get_attachment_names(conn, note_id)
+        conn.close()
+
         # Parse and display
-        content = protobuf.parse_note_data(raw_data)
+        content = protobuf.parse_note_data(raw_data, attachment_names)
         display.display_note_view(note, content)
 
     except FileNotFoundError:
