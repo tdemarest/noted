@@ -66,6 +66,14 @@ uv run noted stats --by-folder
 
 # JSON output for scripting
 uv run noted stats --json
+
+# Delete FTS index only (can be rebuilt from cache)
+uv run noted stats --delete index
+uv run noted stats -d index
+
+# Delete cache DB and FTS index (forces fresh copy on next command)
+uv run noted stats --delete cache
+uv run noted stats -d cache
 ```
 
 Example output:
@@ -74,23 +82,31 @@ Example output:
 Database Statistics
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+Cache
+  Database size:       101.8 MB
+  Last updated:        2025-01-30 00:29:24
+  FTS index:           9.2 MB (1,877 notes) ✓
+  Index built:         2025-01-30 00:55:38
+
 Notes
-  Total:               1,880
-  Pinned:                 26
-  Locked:                  3
-  With checklists:       305 (251 incomplete)
-  Recently deleted:        1
+  Total:                1,879
+  Pinned:                  26
+  Locked:                   3
+  With checklists:        305 (251 incomplete)
+  Recently deleted:         1
 
-Attachments (4,532 total)
-  PDFs:                1,422
-  Images:              1,704  (JPEG: 714, PNG: 559, HEIC: 284, GIF: 147)
-  Tables:                494
-  Links:                  36
-  Office:                 27
-  Emails:                 20
-  Videos:                  3
+Attachments (4,035 total)
+  PDFs:                 1,440
+  Images:               1,928  (JPEG: 714, PNG: 559, HEIC: 284, GIF: 189, ...)
+  Tables:                 494
+  Links:                   36
+  Office:                  42
+  Emails:                  20
+  Videos:                   8
+  Drawings:                 1
+  Other:                   66
 
-  With location data:     91
+  With location data:      91
 ```
 
 ---

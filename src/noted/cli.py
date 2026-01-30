@@ -145,8 +145,30 @@ def stats(
         "-j",
         help="Output as JSON for machine processing.",
     ),
+    delete: str | None = typer.Option(
+        None,
+        "--delete",
+        "-d",
+        help="Delete cache data: 'cache' (DB + FTS index) or 'index' (FTS only).",
+    ),
 ) -> None:
     """Display comprehensive database statistics."""
+    # Handle delete option
+    if delete:
+        delete_lower = delete.lower()
+        if delete_lower == "cache":
+            db.clear_cache()
+            search.clear_index()
+            display.display_success("Cache DB and FTS index deleted.")
+            return
+        elif delete_lower == "index":
+            search.clear_index()
+            display.display_success("FTS index deleted.")
+            return
+        else:
+            display.display_error(f"Invalid delete option: '{delete}'. Use 'cache' or 'index'.")
+            raise typer.Exit(code=1)
+
     try:
         conn = db.get_connection()
         stats_data = db.get_database_stats(conn, by_folder=by_folder)

@@ -48,6 +48,11 @@ def test_stats_command() -> None:
         attachment_type_counts={"public.jpeg": 50, "com.adobe.pdf": 30},
         attachments_with_location=5,
         database_size_bytes=1024 * 1024 * 50,  # 50 MB
+        cache_modified=None,
+        fts_index_size_bytes=1024 * 100,
+        fts_index_built_at="2025-01-29T12:00:00",
+        fts_index_fresh=True,
+        fts_indexed_notes=42,
     )
 
     with (
@@ -74,6 +79,11 @@ def test_stats_by_folder() -> None:
         attachment_type_counts={"public.jpeg": 50},
         attachments_with_location=5,
         database_size_bytes=1024 * 1024 * 50,
+        cache_modified=None,
+        fts_index_size_bytes=1024 * 100,
+        fts_index_built_at="2025-01-29T12:00:00",
+        fts_index_fresh=True,
+        fts_indexed_notes=42,
     )
 
     with (
@@ -100,6 +110,11 @@ def test_stats_shows_pinned() -> None:
         attachment_type_counts={},
         attachments_with_location=0,
         database_size_bytes=1024 * 1024 * 10,
+        cache_modified=None,
+        fts_index_size_bytes=1024 * 100,
+        fts_index_built_at="2025-01-29T12:00:00",
+        fts_index_fresh=True,
+        fts_indexed_notes=100,
     )
 
     with (
@@ -131,6 +146,11 @@ def test_stats_shows_attachments() -> None:
         },
         attachments_with_location=10,
         database_size_bytes=1024 * 1024 * 25,
+        cache_modified=None,
+        fts_index_size_bytes=1024 * 100,
+        fts_index_built_at="2025-01-29T12:00:00",
+        fts_index_fresh=True,
+        fts_indexed_notes=50,
     )
 
     with (
@@ -157,6 +177,11 @@ def test_stats_json_output() -> None:
         attachment_type_counts={"public.jpeg": 50},
         attachments_with_location=5,
         database_size_bytes=1024 * 1024 * 50,
+        cache_modified=None,
+        fts_index_size_bytes=1024 * 100,
+        fts_index_built_at="2025-01-29T12:00:00",
+        fts_index_fresh=True,
+        fts_indexed_notes=42,
     )
 
     with (
@@ -171,7 +196,8 @@ def test_stats_json_output() -> None:
         assert data["notes"]["total"] == 42
         assert data["notes"]["pinned"] == 5
         assert data["attachments"]["total"] == 100
-        assert data["database_size_bytes"] == 1024 * 1024 * 50
+        assert data["cache"]["database_size_bytes"] == 1024 * 1024 * 50
+        assert data["cache"]["fts_index_fresh"] is True
 
 
 def test_refresh_command() -> None:

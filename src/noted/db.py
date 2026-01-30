@@ -357,9 +357,26 @@ def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> Dat
     cursor = conn.execute("SELECT COUNT(*) FROM ZICLOCATION")
     attachments_with_location = cursor.fetchone()[0]
 
-    # Database file size (cached copy)
+    # Database file size and modification time (cached copy)
     cached_db = CACHE_DIR / "NoteStore.sqlite"
-    database_size_bytes = cached_db.stat().st_size if cached_db.exists() else 0
+    if cached_db.exists():
+        db_stat = cached_db.stat()
+        database_size_bytes = db_stat.st_size
+        cache_modified = datetime.fromtimestamp(db_stat.st_mtime, tz=UTC)
+    else:
+        database_size_bytes = 0
+        cache_modified = None
+
+    # FTS index status (import here to avoid circular import)
+    from noted import search
+
+    fts_status = search.get_index_status()
+    fts_index_size_bytes = int(fts_status.get("size_bytes", 0))
+    fts_index_built_at = fts_status.get("built_at")
+    if isinstance(fts_index_built_at, int):
+        fts_index_built_at = None
+    fts_index_fresh = bool(fts_status.get("fresh", False))
+    fts_indexed_notes = int(fts_status.get("note_count", 0))
 
     return DatabaseStats(
         total_notes=total_notes,
@@ -373,6 +390,11 @@ def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> Dat
         attachment_type_counts=attachment_type_counts,
         attachments_with_location=attachments_with_location,
         database_size_bytes=database_size_bytes,
+        cache_modified=cache_modified,
+        fts_index_size_bytes=fts_index_size_bytes,
+        fts_index_built_at=fts_index_built_at,
+        fts_index_fresh=fts_index_fresh,
+        fts_indexed_notes=fts_indexed_notes,
     )
 
 

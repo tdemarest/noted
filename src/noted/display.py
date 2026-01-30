@@ -283,9 +283,31 @@ def display_stats(stats: DatabaseStats) -> None:
     console.print("[bold cyan]Database Statistics[/bold cyan]")
     console.print("━" * 56)
 
-    # Database size
+    # Cache info section
+    console.print("\n[bold]Cache[/bold]")
     if stats.database_size_bytes > 0:
-        console.print(f"\n[dim]Database size: {_format_file_size(stats.database_size_bytes)}[/dim]")
+        console.print(f"  {'Database size:':<20} {_format_file_size(stats.database_size_bytes)}")
+    if stats.cache_modified:
+        modified_str = stats.cache_modified.strftime("%Y-%m-%d %H:%M:%S")
+        console.print(f"  {'Last updated:':<20} {modified_str}")
+    if stats.fts_index_size_bytes > 0:
+        fresh_indicator = "[green]✓[/green]" if stats.fts_index_fresh else "[yellow]stale[/yellow]"
+        console.print(
+            f"  {'FTS index:':<20} {_format_file_size(stats.fts_index_size_bytes)} "
+            f"({stats.fts_indexed_notes:,} notes) {fresh_indicator}"
+        )
+        if stats.fts_index_built_at:
+            # Parse ISO timestamp and format nicely
+            try:
+                from datetime import datetime
+
+                built_dt = datetime.fromisoformat(stats.fts_index_built_at)
+                built_str = built_dt.strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                built_str = stats.fts_index_built_at
+            console.print(f"  {'Index built:':<20} {built_str}")
+    elif stats.fts_indexed_notes == 0:
+        console.print(f"  {'FTS index:':<20} [dim]not built[/dim]")
 
     # Notes section - use consistent label width and right-aligned numbers
     console.print("\n[bold]Notes[/bold]")
@@ -372,7 +394,14 @@ def stats_to_json(stats: DatabaseStats) -> str:
         JSON-formatted string.
     """
     data: dict[str, object] = {
-        "database_size_bytes": stats.database_size_bytes,
+        "cache": {
+            "database_size_bytes": stats.database_size_bytes,
+            "modified": stats.cache_modified.isoformat() if stats.cache_modified else None,
+            "fts_index_size_bytes": stats.fts_index_size_bytes,
+            "fts_index_built_at": stats.fts_index_built_at,
+            "fts_index_fresh": stats.fts_index_fresh,
+            "fts_indexed_notes": stats.fts_indexed_notes,
+        },
         "notes": {
             "total": stats.total_notes,
             "pinned": stats.pinned_notes,

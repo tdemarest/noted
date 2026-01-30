@@ -54,6 +54,11 @@ class DatabaseStats:
         attachment_type_counts: Mapping of UTI type to count.
         attachments_with_location: Number of attachments with GPS location data.
         database_size_bytes: Size of the database file in bytes.
+        cache_modified: When the cache was last updated (datetime or None).
+        fts_index_size_bytes: Size of the FTS index file in bytes.
+        fts_index_built_at: When the FTS index was built (ISO string or None).
+        fts_index_fresh: Whether the FTS index is up to date.
+        fts_indexed_notes: Number of notes in the FTS index.
     """
 
     total_notes: int
@@ -67,6 +72,11 @@ class DatabaseStats:
     attachment_type_counts: dict[str, int]
     attachments_with_location: int
     database_size_bytes: int
+    cache_modified: datetime | None
+    fts_index_size_bytes: int
+    fts_index_built_at: str | None
+    fts_index_fresh: bool
+    fts_indexed_notes: int
 
 
 @dataclass
