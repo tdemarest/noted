@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from noted import search
-from noted.models import Note, SearchResult
 
 
 @pytest.fixture
@@ -35,8 +34,8 @@ def mock_notes_db(tmp_path: Path) -> tuple[sqlite3.Connection, Path]:
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
             ZPARENT INTEGER,
-            ZCREATIONDATE REAL,
-            ZMODIFICATIONDATE REAL,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
             ZMARKEDFORDELETION INTEGER
         )
     """)
@@ -71,7 +70,8 @@ def mock_notes_db(tmp_path: Path) -> tuple[sqlite3.Connection, Path]:
     # Note 1: Regular note
     conn.execute("""
         INSERT INTO ZICCLOUDSYNCINGOBJECT
-        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE, ZMARKEDFORDELETION)
+        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE3,
+         ZMODIFICATIONDATE1, ZMARKEDFORDELETION)
         VALUES (1, 'note-uuid-1', 'Meeting Notes', 100, 758629800.0, 758629800.0, 0)
     """)
     content1 = create_note_content("Discuss budget and Q2 projections for the project.")
@@ -80,7 +80,8 @@ def mock_notes_db(tmp_path: Path) -> tuple[sqlite3.Connection, Path]:
     # Note 2: Another regular note
     conn.execute("""
         INSERT INTO ZICCLOUDSYNCINGOBJECT
-        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE, ZMARKEDFORDELETION)
+        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE3,
+         ZMODIFICATIONDATE1, ZMARKEDFORDELETION)
         VALUES (2, 'note-uuid-2', 'Shopping List', 100, 758629900.0, 758629900.0, 0)
     """)
     content2 = create_note_content("Buy milk, eggs, and bread. Check project deadline.")
@@ -89,7 +90,8 @@ def mock_notes_db(tmp_path: Path) -> tuple[sqlite3.Connection, Path]:
     # Note 3: Locked note (no gzip magic bytes)
     conn.execute("""
         INSERT INTO ZICCLOUDSYNCINGOBJECT
-        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE, ZMARKEDFORDELETION)
+        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE3,
+         ZMODIFICATIONDATE1, ZMARKEDFORDELETION)
         VALUES (3, 'note-uuid-3', 'Secret Note', 100, 758630000.0, 758630000.0, 0)
     """)
     conn.execute(

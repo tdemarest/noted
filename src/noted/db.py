@@ -175,8 +175,8 @@ def list_notes(
             n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
-            n.ZCREATIONDATE as created,
-            n.ZMODIFICATIONDATE as modified
+            n.ZCREATIONDATE3 as created,
+            n.ZMODIFICATIONDATE1 as modified
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZTITLE1 IS NOT NULL
@@ -195,7 +195,7 @@ def list_notes(
         params.append(search_pattern)
         params.append(search_pattern)
 
-    query += " ORDER BY n.ZMODIFICATIONDATE DESC"
+    query += " ORDER BY n.ZMODIFICATIONDATE1 DESC"
 
     if limit is not None:
         query += " LIMIT ?"
@@ -330,8 +330,8 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
             n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
-            n.ZCREATIONDATE as created,
-            n.ZMODIFICATIONDATE as modified
+            n.ZCREATIONDATE3 as created,
+            n.ZMODIFICATIONDATE1 as modified
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.Z_PK = ?
@@ -368,8 +368,8 @@ def get_note_by_identifier(conn: sqlite3.Connection, identifier: str) -> Note | 
             n.ZIDENTIFIER as identifier,
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
-            n.ZCREATIONDATE as created,
-            n.ZMODIFICATIONDATE as modified
+            n.ZCREATIONDATE3 as created,
+            n.ZMODIFICATIONDATE1 as modified
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZIDENTIFIER = ?
@@ -442,8 +442,8 @@ def get_all_notes(
             n.ZTITLE1 as title,
             n.ZFOLDER as folder_id,
             f.ZTITLE2 as folder_name,
-            n.ZCREATIONDATE as created,
-            n.ZMODIFICATIONDATE as modified,
+            n.ZCREATIONDATE3 as created,
+            n.ZMODIFICATIONDATE1 as modified,
             n.ZMARKEDFORDELETION as deleted
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
@@ -454,7 +454,7 @@ def get_all_notes(
     if not include_deleted:
         query += " AND (n.ZMARKEDFORDELETION IS NULL OR n.ZMARKEDFORDELETION != 1)"
 
-    query += " ORDER BY f.ZTITLE2, n.ZMODIFICATIONDATE DESC"
+    query += " ORDER BY f.ZTITLE2, n.ZMODIFICATIONDATE1 DESC"
 
     cursor = conn.execute(query, params)
     notes = []

@@ -168,8 +168,8 @@ def test_get_note_by_id(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
-            ZCREATIONDATE REAL,
-            ZMODIFICATIONDATE REAL,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
         )
     """)
@@ -181,7 +181,7 @@ def test_get_note_by_id(tmp_path: Path) -> None:
     """)
     conn.execute("""
         INSERT INTO ZICCLOUDSYNCINGOBJECT
-        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE, ZMODIFICATIONDATE)
+        (Z_PK, ZIDENTIFIER, ZTITLE1, ZFOLDER, ZCREATIONDATE3, ZMODIFICATIONDATE1)
         VALUES (2, 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE', 'Test Note', 1, 758629800.0, 758629900.0)
     """)
     conn.commit()
@@ -210,8 +210,8 @@ def test_get_note_by_id_not_found(tmp_path: Path) -> None:
             ZTITLE1 TEXT,
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
-            ZCREATIONDATE REAL,
-            ZMODIFICATIONDATE REAL,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
         )
     """)
@@ -425,8 +425,8 @@ def test_get_all_notes_includes_deleted(tmp_path: Path) -> None:
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
             ZPARENT INTEGER,
-            ZCREATIONDATE REAL,
-            ZMODIFICATIONDATE REAL,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
         )
     """)
@@ -476,8 +476,8 @@ def test_get_all_notes_with_folder_filter(tmp_path: Path) -> None:
             ZTITLE2 TEXT,
             ZFOLDER INTEGER,
             ZPARENT INTEGER,
-            ZCREATIONDATE REAL,
-            ZMODIFICATIONDATE REAL,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
             ZMARKEDFORDELETION INTEGER DEFAULT 0
         )
     """)
