@@ -20,7 +20,7 @@ def test_help() -> None:
     assert result.exit_code == 0
     assert "noted" in result.output.lower()
     assert "list" in result.output
-    assert "count" in result.output
+    assert "stats" in result.output
     assert "refresh" in result.output
 
 
@@ -32,11 +32,12 @@ def test_list_help() -> None:
     assert "--limit" in result.output
 
 
-def test_count_help() -> None:
-    """Test count command help."""
-    result = runner.invoke(app, ["count", "--help"])
+def test_stats_help() -> None:
+    """Test stats command help."""
+    result = runner.invoke(app, ["stats", "--help"])
     assert result.exit_code == 0
     assert "--by-folder" in result.output
+    assert "--json" in result.output
 
 
 def test_view_help() -> None:

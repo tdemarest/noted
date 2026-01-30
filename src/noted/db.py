@@ -11,7 +11,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from noted.models import Note, NoteSummary
+from noted.models import DatabaseStats, Note, NoteSummary
 
 
 @dataclass
@@ -266,6 +266,114 @@ def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummar
             folder_counts[row["folder"]] = row["count"]
 
     return NoteSummary(total_count=total, folder_counts=folder_counts)
+
+
+def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> DatabaseStats:
+    """Get comprehensive statistics about the notes database.
+
+    Queries multiple aspects of the database to build a complete picture:
+    - Note counts (total, pinned, locked, deleted, checklists)
+    - Folder breakdown (optional)
+    - Attachment type distribution
+    - Location-tagged attachments
+
+    Args:
+        conn: Database connection.
+        by_folder: Whether to include per-folder counts.
+
+    Returns:
+        DatabaseStats with all statistics populated.
+    """
+    # Total notes (non-deleted)
+    total_notes = count_notes(conn)
+
+    # Pinned notes
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL AND ZISPINNED = 1 AND ZMARKEDFORDELETION != 1
+    """)
+    pinned_notes = cursor.fetchone()[0]
+
+    # Locked notes (password-protected)
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL AND ZISPASSWORDPROTECTED = 1
+    """)
+    locked_notes = cursor.fetchone()[0]
+
+    # Deleted notes
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL AND ZMARKEDFORDELETION = 1
+    """)
+    deleted_notes = cursor.fetchone()[0]
+
+    # Notes with checklists
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLIST = 1 AND ZMARKEDFORDELETION != 1
+    """)
+    notes_with_checklists = cursor.fetchone()[0]
+
+    # Notes with incomplete checklists
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLISTINPROGRESS = 1 AND ZMARKEDFORDELETION != 1
+    """)
+    notes_with_incomplete_checklists = cursor.fetchone()[0]
+
+    # Folder counts (optional)
+    folder_counts: dict[str, int] = {}
+    if by_folder:
+        cursor = conn.execute("""
+            SELECT
+                COALESCE(f.ZTITLE2, '(No Folder)') as folder,
+                COUNT(*) as count
+            FROM ZICCLOUDSYNCINGOBJECT n
+            LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
+            WHERE n.ZTITLE1 IS NOT NULL
+              AND n.ZMARKEDFORDELETION != 1
+            GROUP BY f.ZTITLE2
+            ORDER BY count DESC
+        """)
+        for row in cursor:
+            folder_counts[row["folder"]] = row["count"]
+
+    # Attachment type distribution
+    cursor = conn.execute("""
+        SELECT ZTYPEUTI, COUNT(*) as count
+        FROM ZICCLOUDSYNCINGOBJECT
+        WHERE ZTYPEUTI IS NOT NULL
+        GROUP BY ZTYPEUTI
+        ORDER BY count DESC
+    """)
+    attachment_type_counts: dict[str, int] = {}
+    total_attachments = 0
+    for row in cursor:
+        attachment_type_counts[row["ZTYPEUTI"]] = row["count"]
+        total_attachments += row["count"]
+
+    # Attachments with location data
+    cursor = conn.execute("SELECT COUNT(*) FROM ZICLOCATION")
+    attachments_with_location = cursor.fetchone()[0]
+
+    # Database file size (cached copy)
+    cached_db = CACHE_DIR / "NoteStore.sqlite"
+    database_size_bytes = cached_db.stat().st_size if cached_db.exists() else 0
+
+    return DatabaseStats(
+        total_notes=total_notes,
+        pinned_notes=pinned_notes,
+        locked_notes=locked_notes,
+        deleted_notes=deleted_notes,
+        notes_with_checklists=notes_with_checklists,
+        notes_with_incomplete_checklists=notes_with_incomplete_checklists,
+        folder_counts=folder_counts,
+        total_attachments=total_attachments,
+        attachment_type_counts=attachment_type_counts,
+        attachments_with_location=attachments_with_location,
+        database_size_bytes=database_size_bytes,
+    )
 
 
 def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:

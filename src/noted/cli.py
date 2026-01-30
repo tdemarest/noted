@@ -132,25 +132,35 @@ def list(
 
 
 @app.command()
-def count(
+def stats(
     by_folder: bool = typer.Option(
         False,
         "--by-folder",
         "-f",
-        help="Show counts per folder.",
+        help="Include per-folder note counts.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Output as JSON for machine processing.",
     ),
 ) -> None:
-    """Count total notes."""
+    """Display comprehensive database statistics."""
     try:
         conn = db.get_connection()
-        summary = db.get_summary(conn, by_folder=by_folder)
-        display.display_count(summary)
+        stats_data = db.get_database_stats(conn, by_folder=by_folder)
         conn.close()
+
+        if json_output:
+            print(display.stats_to_json(stats_data))
+        else:
+            display.display_stats(stats_data)
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")
         raise typer.Exit(code=1)
     except Exception as e:
-        logger.exception("Error counting notes")
+        logger.exception("Error getting database stats")
         display.display_error(str(e))
         raise typer.Exit(code=1)
 

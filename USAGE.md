@@ -53,14 +53,44 @@ uv run noted list --folder "Work"
 uv run noted list -f "Projects"
 ```
 
-### Counting Notes
+### Database Statistics
+
+Get comprehensive statistics about your notes database:
 
 ```bash
-# Total count
-uv run noted count
+# Show all statistics
+uv run noted stats
 
-# Count by folder
-uv run noted count --by-folder
+# Include folder breakdown
+uv run noted stats --by-folder
+
+# JSON output for scripting
+uv run noted stats --json
+```
+
+Example output:
+
+```
+Database Statistics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Notes
+  Total:               1,880
+  Pinned:                 26
+  Locked:                  3
+  With checklists:       305 (251 incomplete)
+  Recently deleted:        1
+
+Attachments (4,532 total)
+  PDFs:                1,422
+  Images:              1,704  (JPEG: 714, PNG: 559, HEIC: 284, GIF: 147)
+  Tables:                494
+  Links:                  36
+  Office:                 27
+  Emails:                 20
+  Videos:                  3
+
+  With location data:     91
 ```
 
 ---

@@ -39,6 +39,37 @@ class NoteSummary:
 
 
 @dataclass
+class DatabaseStats:
+    """Comprehensive statistics about the notes database.
+
+    Attributes:
+        total_notes: Total number of non-deleted notes.
+        pinned_notes: Number of pinned notes.
+        locked_notes: Number of password-protected notes.
+        deleted_notes: Number of notes marked for deletion.
+        notes_with_checklists: Number of notes containing checklists.
+        notes_with_incomplete_checklists: Notes with unchecked checklist items.
+        folder_counts: Mapping of folder name to note count.
+        total_attachments: Total number of attachments across all notes.
+        attachment_type_counts: Mapping of UTI type to count.
+        attachments_with_location: Number of attachments with GPS location data.
+        database_size_bytes: Size of the database file in bytes.
+    """
+
+    total_notes: int
+    pinned_notes: int
+    locked_notes: int
+    deleted_notes: int
+    notes_with_checklists: int
+    notes_with_incomplete_checklists: int
+    folder_counts: dict[str, int]
+    total_attachments: int
+    attachment_type_counts: dict[str, int]
+    attachments_with_location: int
+    database_size_bytes: int
+
+
+@dataclass
 class Table:
     """Parsed table from Apple Notes.
 

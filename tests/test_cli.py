@@ -7,7 +7,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from noted.cli import app
-from noted.models import Note, NoteSummary
+from noted.models import DatabaseStats, Note
 
 runner = CliRunner()
 
@@ -34,34 +34,144 @@ def test_list_command() -> None:
         assert "Test Note" in result.output
 
 
-def test_count_command() -> None:
-    """Test the count command."""
-    mock_summary = NoteSummary(total_count=42, folder_counts={})
-
-    with (
-        patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_summary", return_value=mock_summary),
-    ):
-        result = runner.invoke(app, ["count"])
-        assert result.exit_code == 0
-        assert "42" in result.output
-
-
-def test_count_by_folder() -> None:
-    """Test the count --by-folder command."""
-    mock_summary = NoteSummary(
-        total_count=42,
-        folder_counts={"Personal": 20, "Work": 22},
+def test_stats_command() -> None:
+    """Test the stats command."""
+    mock_stats = DatabaseStats(
+        total_notes=42,
+        pinned_notes=5,
+        locked_notes=2,
+        deleted_notes=1,
+        notes_with_checklists=10,
+        notes_with_incomplete_checklists=3,
+        folder_counts={},
+        total_attachments=100,
+        attachment_type_counts={"public.jpeg": 50, "com.adobe.pdf": 30},
+        attachments_with_location=5,
+        database_size_bytes=1024 * 1024 * 50,  # 50 MB
     )
 
     with (
         patch("noted.cli.db.get_connection"),
-        patch("noted.cli.db.get_summary", return_value=mock_summary),
+        patch("noted.cli.db.get_database_stats", return_value=mock_stats),
     ):
-        result = runner.invoke(app, ["count", "--by-folder"])
+        result = runner.invoke(app, ["stats"])
+        assert result.exit_code == 0
+        assert "42" in result.output
+        assert "Total" in result.output
+
+
+def test_stats_by_folder() -> None:
+    """Test the stats --by-folder command."""
+    mock_stats = DatabaseStats(
+        total_notes=42,
+        pinned_notes=5,
+        locked_notes=2,
+        deleted_notes=1,
+        notes_with_checklists=10,
+        notes_with_incomplete_checklists=3,
+        folder_counts={"Personal": 20, "Work": 22},
+        total_attachments=100,
+        attachment_type_counts={"public.jpeg": 50},
+        attachments_with_location=5,
+        database_size_bytes=1024 * 1024 * 50,
+    )
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_database_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["stats", "--by-folder"])
         assert result.exit_code == 0
         assert "Personal" in result.output
         assert "Work" in result.output
+
+
+def test_stats_shows_pinned() -> None:
+    """Test stats command shows pinned notes count."""
+    mock_stats = DatabaseStats(
+        total_notes=100,
+        pinned_notes=15,
+        locked_notes=0,
+        deleted_notes=0,
+        notes_with_checklists=0,
+        notes_with_incomplete_checklists=0,
+        folder_counts={},
+        total_attachments=0,
+        attachment_type_counts={},
+        attachments_with_location=0,
+        database_size_bytes=1024 * 1024 * 10,
+    )
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_database_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["stats"])
+        assert result.exit_code == 0
+        assert "Pinned" in result.output
+        assert "15" in result.output
+
+
+def test_stats_shows_attachments() -> None:
+    """Test stats command shows attachment statistics."""
+    mock_stats = DatabaseStats(
+        total_notes=50,
+        pinned_notes=0,
+        locked_notes=0,
+        deleted_notes=0,
+        notes_with_checklists=0,
+        notes_with_incomplete_checklists=0,
+        folder_counts={},
+        total_attachments=200,
+        attachment_type_counts={
+            "public.jpeg": 80,
+            "public.png": 40,
+            "com.adobe.pdf": 50,
+            "com.apple.notes.table": 30,
+        },
+        attachments_with_location=10,
+        database_size_bytes=1024 * 1024 * 25,
+    )
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_database_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["stats"])
+        assert result.exit_code == 0
+        assert "Attachments" in result.output
+        assert "200" in result.output
+
+
+def test_stats_json_output() -> None:
+    """Test stats command with JSON output."""
+    mock_stats = DatabaseStats(
+        total_notes=42,
+        pinned_notes=5,
+        locked_notes=2,
+        deleted_notes=1,
+        notes_with_checklists=10,
+        notes_with_incomplete_checklists=3,
+        folder_counts={},
+        total_attachments=100,
+        attachment_type_counts={"public.jpeg": 50},
+        attachments_with_location=5,
+        database_size_bytes=1024 * 1024 * 50,
+    )
+
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_database_stats", return_value=mock_stats),
+    ):
+        result = runner.invoke(app, ["stats", "--json"])
+        assert result.exit_code == 0
+        # Should be valid JSON
+        import json
+        data = json.loads(result.output)
+        assert data["notes"]["total"] == 42
+        assert data["notes"]["pinned"] == 5
+        assert data["attachments"]["total"] == 100
+        assert data["database_size_bytes"] == 1024 * 1024 * 50
 
 
 def test_refresh_command() -> None:

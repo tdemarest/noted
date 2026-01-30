@@ -12,6 +12,7 @@ from rich.table import Table as RichTable
 from rich.text import Text
 
 from noted.models import (
+    DatabaseStats,
     FormattedRun,
     Note,
     NoteContent,
@@ -207,6 +208,188 @@ def display_count(summary: NoteSummary) -> None:
             table.add_row(folder, str(count))
 
         console.print(table)
+
+
+# Attachment type groupings for cleaner display
+_ATTACHMENT_GROUPS: dict[str, list[str]] = {
+    "Images": [
+        "public.jpeg",
+        "public.png",
+        "public.heic",
+        "public.gif",
+        "public.tiff",
+        "com.compuserve.gif",
+        "org.webmproject.webp",
+        "public.svg-image",
+        "public.image",
+    ],
+    "PDFs": [
+        "com.adobe.pdf",
+        "public.pdf",
+        "com.apple.paper.doc.pdf",
+    ],
+    "Videos": [
+        "com.apple.quicktime-movie",
+        "public.mpeg-4",
+        "public.movie",
+    ],
+    "Office": [
+        "org.openxmlformats.spreadsheetml.sheet",
+        "org.openxmlformats.wordprocessingml.document",
+        "org.openxmlformats.presentationml.presentation",
+        "com.microsoft.excel.xls",
+        "com.microsoft.word.doc",
+    ],
+    "Tables": [
+        "com.apple.notes.table",
+    ],
+    "Links": [
+        "public.url",
+    ],
+    "Emails": [
+        "com.apple.mail.email",
+    ],
+    "Drawings": [
+        "com.apple.drawing",
+        "com.apple.drawing.2",
+    ],
+}
+
+# Build reverse lookup: UTI -> group name
+_UTI_TO_GROUP: dict[str, str] = {}
+for group_name, utis in _ATTACHMENT_GROUPS.items():
+    for uti in utis:
+        _UTI_TO_GROUP[uti] = group_name
+
+# Subtype display names for breakdown
+_IMAGE_SUBTYPES: dict[str, str] = {
+    "public.jpeg": "JPEG",
+    "public.png": "PNG",
+    "public.heic": "HEIC",
+    "public.gif": "GIF",
+    "com.compuserve.gif": "GIF",
+    "public.tiff": "TIFF",
+    "org.webmproject.webp": "WebP",
+    "public.svg-image": "SVG",
+}
+
+
+def display_stats(stats: DatabaseStats) -> None:
+    """Display comprehensive database statistics with rich formatting.
+
+    Args:
+        stats: DatabaseStats with all statistics.
+    """
+    console.print("[bold cyan]Database Statistics[/bold cyan]")
+    console.print("━" * 56)
+
+    # Database size
+    if stats.database_size_bytes > 0:
+        console.print(f"\n[dim]Database size: {_format_file_size(stats.database_size_bytes)}[/dim]")
+
+    # Notes section - use consistent label width and right-aligned numbers
+    console.print("\n[bold]Notes[/bold]")
+    console.print(f"  {'Total:':<20} {stats.total_notes:>6,}")
+    if stats.pinned_notes > 0:
+        console.print(f"  {'Pinned:':<20} {stats.pinned_notes:>6,}")
+    if stats.locked_notes > 0:
+        console.print(f"  {'Locked:':<20} {stats.locked_notes:>6,}")
+    if stats.notes_with_checklists > 0:
+        incomplete_info = ""
+        if stats.notes_with_incomplete_checklists > 0:
+            incomplete_info = f" ({stats.notes_with_incomplete_checklists} incomplete)"
+        count_str = f"{stats.notes_with_checklists:>6,}"
+        console.print(f"  {'With checklists:':<20} {count_str}{incomplete_info}")
+    if stats.deleted_notes > 0:
+        console.print(f"  {'Recently deleted:':<20} {stats.deleted_notes:>6,}")
+
+    # Attachments section
+    if stats.total_attachments > 0:
+        console.print(f"\n[bold]Attachments[/bold] ({stats.total_attachments:,} total)")
+
+        # Group attachments by category
+        grouped: dict[str, int] = {}
+        image_subtypes: dict[str, int] = {}
+        other_count = 0
+
+        for uti, count in stats.attachment_type_counts.items():
+            group = _UTI_TO_GROUP.get(uti)
+            if group:
+                grouped[group] = grouped.get(group, 0) + count
+                # Track image subtypes for detailed breakdown
+                if group == "Images" and uti in _IMAGE_SUBTYPES:
+                    subtype = _IMAGE_SUBTYPES[uti]
+                    image_subtypes[subtype] = image_subtypes.get(subtype, 0) + count
+            else:
+                other_count += count
+
+        # Display groups in a consistent order
+        display_order = [
+            "PDFs", "Images", "Tables", "Links", "Office", "Emails", "Videos", "Drawings"
+        ]
+        for group in display_order:
+            if group in grouped:
+                count = grouped[group]
+                label = f"{group}:"
+                # Special handling for images with subtype breakdown
+                if group == "Images" and image_subtypes:
+                    # Sort subtypes by count
+                    sorted_subtypes = sorted(image_subtypes.items(), key=lambda x: -x[1])
+                    subtype_str = ", ".join(f"{name}: {c}" for name, c in sorted_subtypes[:4])
+                    if len(sorted_subtypes) > 4:
+                        subtype_str += ", ..."
+                    console.print(f"  {label:<20} {count:>6,}  [dim]({subtype_str})[/dim]")
+                else:
+                    console.print(f"  {label:<20} {count:>6,}")
+
+        if other_count > 0:
+            console.print(f"  {'Other:':<20} {other_count:>6,}")
+
+        if stats.attachments_with_location > 0:
+            console.print(f"\n  {'With location data:':<20} {stats.attachments_with_location:>6,}")
+
+    # Folders section (if requested)
+    if stats.folder_counts:
+        folder_count = len(stats.folder_counts)
+        console.print(f"\n[bold]Folders[/bold] ({folder_count} total)")
+        table = RichTable(show_header=True, header_style="bold", box=box.SIMPLE)
+        table.add_column("Folder")
+        table.add_column("Notes", justify="right")
+
+        for folder, count in stats.folder_counts.items():
+            table.add_row(folder, str(count))
+
+        console.print(table)
+
+
+def stats_to_json(stats: DatabaseStats) -> str:
+    """Convert DatabaseStats to JSON string.
+
+    Args:
+        stats: DatabaseStats with all statistics.
+
+    Returns:
+        JSON-formatted string.
+    """
+    data: dict[str, object] = {
+        "database_size_bytes": stats.database_size_bytes,
+        "notes": {
+            "total": stats.total_notes,
+            "pinned": stats.pinned_notes,
+            "locked": stats.locked_notes,
+            "deleted": stats.deleted_notes,
+            "with_checklists": stats.notes_with_checklists,
+            "with_incomplete_checklists": stats.notes_with_incomplete_checklists,
+        },
+        "attachments": {
+            "total": stats.total_attachments,
+            "with_location": stats.attachments_with_location,
+            "by_type": stats.attachment_type_counts,
+        },
+    }
+    if stats.folder_counts:
+        data["folders"] = stats.folder_counts
+    return json.dumps(data, indent=2)
 
 
 def display_error(message: str) -> None:
