@@ -9,7 +9,7 @@ to be able to:
   - Write operations will be accessible in production.
 - Read, write, create, delete notes.
 - List notes
-- Count notes
+- Database statistics
 - Search notes
 - Export notes to markdown, JSON, HTML or PDF formats
 
@@ -83,7 +83,7 @@ noted/
 ├── src/noted/
 │   ├── __init__.py         # Package version
 │   ├── attachments.py      # Attachment export, archive creation
-│   ├── cli.py              # Typer CLI commands (list, count, view, export, refresh, index)
+│   ├── cli.py              # Typer CLI commands (list, stats, view, export, refresh, index)
 │   ├── db.py               # Database caching, connection, queries
 │   ├── display.py          # Rich terminal output formatting
 │   ├── export.py           # Full export functionality, master index

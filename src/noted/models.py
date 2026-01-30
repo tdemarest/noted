@@ -15,6 +15,9 @@ class Note:
         folder: The folder name, or None if not in a folder.
         created: When the note was created, or None if unknown.
         modified: When the note was last modified, or None if unknown.
+        has_checklist: Whether the note contains a checklist.
+        checklist_complete: Whether all checklist items are checked.
+        is_locked: Whether the note is password-protected.
     """
 
     id: int
@@ -23,6 +26,9 @@ class Note:
     folder: str | None
     created: datetime | None
     modified: datetime | None
+    has_checklist: bool = False
+    checklist_complete: bool = False
+    is_locked: bool = False
 
 
 @dataclass

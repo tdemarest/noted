@@ -6,6 +6,7 @@ A comprehensive guide to using the `noted` CLI tool for working with Apple Notes
 
 - [Getting Started](#getting-started)
 - [Listing Notes](#listing-notes)
+- [Tree View](#tree-view)
 - [Searching Notes](#searching-notes)
   - [Basic Search](#basic-search)
   - [Deep Search (FTS5)](#deep-search-fts5)
@@ -107,6 +108,72 @@ Attachments (4,035 total)
   Other:                   66
 
   With location data:      91
+```
+
+---
+
+## Tree View
+
+Display notes and folders in a hierarchical tree structure:
+
+```bash
+# Show folder hierarchy with note counts
+uv run noted list --tree
+uv run noted list -t
+
+# Include individual notes with icons
+uv run noted list --tree --verbose
+uv run noted list -t -v
+
+# Filter to specific folder subtree
+uv run noted list --tree -f "Work"
+
+# Combine with search
+uv run noted list --tree --verbose -s "meeting"
+```
+
+### Tree View Icons
+
+| Icon | Meaning |
+|------|---------|
+| 📁 | Folder |
+| 🗑️ | Recently Deleted folder |
+| 📄 | Note |
+| 🔒 | Locked (password-protected) |
+| ✅ | Checklist complete |
+| 🔲 | Checklist incomplete |
+| 📷 | Image attachment |
+| 📄 | PDF attachment |
+| 📊 | Office document |
+| 🎬 | Video |
+| 🔗 | Link |
+| 📎 | Other attachment |
+
+### Example Output
+
+Default tree (folders only):
+
+```text
+📁 Notes (1879)
+├── 📁 Work (245)
+│   ├── 📁 Projects (52)
+│   │   └── 📁 2024 (18)
+│   └── 📁 Meetings (89)
+├── 📁 Personal (312)
+└── 🗑️ Recently Deleted (4)
+```
+
+With `--verbose` (includes notes):
+
+```text
+📁 Notes (1879)
+├── 📁 Work (245)
+│   ├── 📄 Weekly Status 🔲 📷×2
+│   ├── 📄 Budget Q1 ✅ 📊
+│   ├── 📄 Passwords 🔒
+│   └── 📁 Projects (52)
+│       └── 📄 Roadmap 📄
+└── 📁 Personal (312)
 ```
 
 ---

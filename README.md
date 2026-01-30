@@ -44,7 +44,9 @@
       <a href="#usage">Usage</a>
       <ul>
         <li><a href="#list-notes">List Notes</a></li>
-        <li><a href="#count-notes">Count Notes</a></li>
+        <li><a href="#tree-view">Tree View</a></li>
+        <li><a href="#searching-notes">Searching Notes</a></li>
+        <li><a href="#database-statistics">Database Statistics</a></li>
         <li><a href="#view-a-note">View a Note</a></li>
         <li><a href="#export-formats">Export Formats</a></li>
         <li><a href="#export-notes">Export Notes</a></li>
@@ -160,18 +162,64 @@ Filter by folder and limit results:
 uv run noted list --folder "Work" --limit 10
 ```
 
-### Count Notes
+### Tree View
 
-Count all notes:
+Display notes and folders in a hierarchical tree:
 
 ```bash
-uv run noted count
+# Show folder hierarchy with note counts
+uv run noted list --tree
+
+# Include individual notes with status icons
+uv run noted list --tree --verbose
+
+# Filter to specific folder
+uv run noted list --tree -f "Work"
 ```
 
-Count notes grouped by folder:
+Tree view shows icons for: 📁 folders, 🗑️ trash, 📄 notes, 🔒 locked, ✅/🔲 checklists, and attachment types.
+
+### Searching Notes
+
+Search titles and folder names:
 
 ```bash
-uv run noted count --by-folder
+uv run noted list --search "meeting"
+uv run noted list -s "project" --limit 20
+```
+
+Deep search inside note content using FTS5 full-text search:
+
+```bash
+# Search note content
+uv run noted list --search "budget" --deep
+
+# Boolean operators (must be UPPERCASE)
+uv run noted list -s 'budget AND Q2' --deep
+uv run noted list -s '(budget OR cost) NOT personal' --deep
+
+# Column-specific search
+uv run noted list -s 'title:meeting AND content:deadline' --deep
+```
+
+See [USAGE.md](USAGE.md) for complete FTS5 query syntax documentation.
+
+### Database Statistics
+
+Get comprehensive statistics about your notes:
+
+```bash
+# Show all statistics
+uv run noted stats
+
+# Include folder breakdown
+uv run noted stats --by-folder
+
+# JSON output for scripting
+uv run noted stats --json
+
+# Clear cache and rebuild
+uv run noted stats --delete cache
 ```
 
 ### View a Note
@@ -293,13 +341,22 @@ Apple Notes that are password-protected cannot be read by this tool:
 
 **To export locked notes:** Unlock them in Apple Notes first, then run the export again.
 
-### Refresh Database Cache
+### Cache and Index Management
 
-Force a refresh of the cached database:
+Force a refresh of the cached database and search index:
 
 ```bash
+# Clear cache and FTS index (forces fresh copy)
 uv run noted refresh
+
+# Check FTS index status
+uv run noted index
+
+# Force rebuild FTS index
+uv run noted index --rebuild
 ```
+
+For comprehensive documentation including FTS5 query syntax, export options, and more, see **[USAGE.md](USAGE.md)**.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -336,7 +393,9 @@ uv run noted refresh
 
 ## Roadmap
 
-- [x] List and count notes
+- [x] List notes with folder filtering
+- [x] Tree view with folder hierarchy
+- [x] Database statistics
 - [x] View notes with rich formatting
 - [x] Export to Markdown, JSON, HTML
 - [x] Extract attachments
@@ -346,7 +405,8 @@ uv run noted refresh
 - [x] Full export with nested folder hierarchy
 - [x] Progress bars for export operations
 - [x] Locked note detection and placeholders
-- [x] Search notes by content
+- [x] FTS5 full-text search with boolean operators
+- [x] Search index management
 - [ ] PDF export
 
 

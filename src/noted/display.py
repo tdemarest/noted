@@ -10,7 +10,9 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table as RichTable
 from rich.text import Text
+from rich.tree import Tree
 
+from noted.db import FolderInfo
 from noted.models import (
     DatabaseStats,
     FormattedRun,
@@ -111,6 +113,188 @@ def _highlight_match(text: str, search: str) -> Text:
             pos = match_pos + len(search)
 
     return result
+
+
+# Tree view icons
+TREE_ICONS = {
+    "folder": "📁",
+    "trash": "🗑️",
+    "note": "📄",
+    "locked": "🔒",
+    "checklist_complete": "✅",
+    "checklist_incomplete": "🔲",
+}
+
+# Attachment type icons for tree view
+ATTACHMENT_ICONS = {
+    "Images": "📷",
+    "PDFs": "📄",
+    "Videos": "🎬",
+    "Office": "📊",
+    "Links": "🔗",
+    "Generic": "📎",
+}
+
+
+def _categorize_attachment(uti: str) -> str:
+    """Categorize a UTI into a display group.
+
+    Args:
+        uti: Uniform Type Identifier string.
+
+    Returns:
+        Category name for the attachment type.
+    """
+    group = _UTI_TO_GROUP.get(uti)
+    if group in ATTACHMENT_ICONS:
+        return group
+    return "Generic"
+
+
+def _format_attachment_icons(type_counts: dict[str, int]) -> str:
+    """Format attachment types as consolidated icons.
+
+    Args:
+        type_counts: Mapping of UTI type to count.
+
+    Returns:
+        Formatted string like '📷×3 📊' or empty string if no attachments.
+    """
+    if not type_counts:
+        return ""
+
+    # Consolidate by category
+    category_counts: dict[str, int] = {}
+    for uti, count in type_counts.items():
+        category = _categorize_attachment(uti)
+        category_counts[category] = category_counts.get(category, 0) + count
+
+    # Build icon string
+    parts = []
+    for category, count in sorted(category_counts.items()):
+        icon = ATTACHMENT_ICONS.get(category, "📎")
+        if count > 1:
+            parts.append(f"{icon}×{count}")
+        else:
+            parts.append(icon)
+
+    return " ".join(parts)
+
+
+def display_notes_tree(
+    folders: list[FolderInfo],
+    notes: list[Note],
+    attachment_types: dict[int, dict[str, int]] | None = None,
+    verbose: bool = False,
+) -> None:
+    """Render notes organized by folder hierarchy using Rich Tree.
+
+    Args:
+        folders: List of FolderInfo from db.get_folders().
+        notes: List of Note objects (with checklist fields).
+        attachment_types: Optional mapping of note_id to UTI type counts.
+        verbose: If True, show individual notes with attachments.
+    """
+    if not folders:
+        console.print("[yellow]No folders found.[/yellow]")
+        return
+
+    # Calculate total notes
+    total_count = sum(f.note_count for f in folders)
+
+    # Create root tree
+    root = Tree(f"[bold]{TREE_ICONS['folder']} Notes[/bold] [dim]({total_count})[/dim]")
+
+    # Build folder hierarchy from paths
+    # folders are already sorted by path from get_folders()
+    folder_nodes: dict[str, Tree] = {}
+
+    for folder in folders:
+        path = folder.path
+        parts = path.split("/")
+
+        # Navigate/create path
+        current_node = root
+        current_path = ""
+
+        for i, part in enumerate(parts):
+            current_path = "/".join(parts[: i + 1])
+
+            if current_path not in folder_nodes:
+                # Choose icon based on folder name
+                is_trash = part == "Recently Deleted"
+                icon = TREE_ICONS["trash"] if is_trash else TREE_ICONS["folder"]
+
+                # This is the folder we're adding
+                if current_path == path:
+                    # This is the actual folder entry
+                    label = f"{icon} {part} [dim]({folder.note_count})[/dim]"
+                else:
+                    # Intermediate folder not in our list, show without count
+                    label = f"{icon} {part}"
+
+                new_node = current_node.add(label)
+                folder_nodes[current_path] = new_node
+                current_node = new_node
+            else:
+                current_node = folder_nodes[current_path]
+
+    # If verbose, add notes under their folders
+    if verbose and notes:
+        # Build lookup from folder name to full path (for notes with immediate folder name)
+        folder_name_to_paths: dict[str, list[str]] = {}
+        for folder in folders:
+            name = folder.path.split("/")[-1]  # Get immediate folder name
+            if name not in folder_name_to_paths:
+                folder_name_to_paths[name] = []
+            folder_name_to_paths[name].append(folder.path)
+
+        # Group notes by folder path
+        notes_by_folder: dict[str, list[Note]] = {}
+        for note in notes:
+            folder_name = note.folder
+            if folder_name is None:
+                continue
+
+            # Find matching folder path(s) - if multiple, use first match
+            matching_paths = folder_name_to_paths.get(folder_name, [])
+            if matching_paths:
+                folder_path = matching_paths[0]
+                if folder_path not in notes_by_folder:
+                    notes_by_folder[folder_path] = []
+                notes_by_folder[folder_path].append(note)
+
+        # Add notes to each folder node
+        for folder_path, folder_notes in notes_by_folder.items():
+            if folder_path in folder_nodes:
+                node = folder_nodes[folder_path]
+            else:
+                # Notes without a folder or unmatched folder
+                continue
+
+            for note in folder_notes:
+                # Build note label
+                label_parts = [f"{TREE_ICONS['note']} {note.title}"]
+
+                # Add lock indicator (takes precedence over other indicators)
+                if note.is_locked:
+                    label_parts.append(f" {TREE_ICONS['locked']}")
+                elif note.has_checklist:
+                    # Add checklist indicator
+                    if note.checklist_complete:
+                        label_parts.append(f" {TREE_ICONS['checklist_complete']}")
+                    else:
+                        label_parts.append(f" {TREE_ICONS['checklist_incomplete']}")
+
+                # Add attachment icons
+                if attachment_types and note.id in attachment_types:
+                    att_icons = _format_attachment_icons(attachment_types[note.id])
+                    if att_icons:
+                        label_parts.append(f" {att_icons}")
+
+                node.add("".join(label_parts))
+
+    console.print(root)
 
 
 def _format_snippet(snippet: str) -> Text:

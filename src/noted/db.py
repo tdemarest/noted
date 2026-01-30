@@ -176,7 +176,10 @@ def list_notes(
             n.ZTITLE1 as title,
             f.ZTITLE2 as folder,
             n.ZCREATIONDATE3 as created,
-            n.ZMODIFICATIONDATE1 as modified
+            n.ZMODIFICATIONDATE1 as modified,
+            n.ZHASCHECKLIST as has_checklist,
+            n.ZHASCHECKLISTINPROGRESS as checklist_in_progress,
+            n.ZISPASSWORDPROTECTED as is_locked
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZTITLE1 IS NOT NULL
@@ -204,6 +207,8 @@ def list_notes(
     cursor = conn.execute(query, params)
     notes = []
     for row in cursor:
+        has_checklist = bool(row["has_checklist"])
+        checklist_in_progress = bool(row["checklist_in_progress"])
         notes.append(
             Note(
                 id=row["id"],
@@ -212,6 +217,9 @@ def list_notes(
                 folder=row["folder"],
                 created=apple_timestamp_to_datetime(row["created"]),
                 modified=apple_timestamp_to_datetime(row["modified"]),
+                has_checklist=has_checklist,
+                checklist_complete=has_checklist and not checklist_in_progress,
+                is_locked=bool(row["is_locked"]),
             )
         )
     return notes
@@ -713,6 +721,42 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
     ]
     # Sort by full path for proper hierarchy ordering
     return sorted(folders, key=lambda f: f.path.lower())
+
+
+def get_all_attachment_types(conn: sqlite3.Connection) -> dict[int, dict[str, int]]:
+    """Get attachment type counts for all notes.
+
+    Queries all notes and their attachments, grouping by note ID and UTI type.
+
+    Args:
+        conn: Database connection.
+
+    Returns:
+        Mapping of note_id (Z_PK) to {UTI type: count}.
+        Notes without attachments are not included.
+    """
+    query = """
+        SELECT
+            att.ZNOTE as note_id,
+            att.ZTYPEUTI as type_uti,
+            COUNT(*) as count
+        FROM ZICCLOUDSYNCINGOBJECT att
+        WHERE att.ZNOTE IS NOT NULL
+          AND att.ZTYPEUTI IS NOT NULL
+        GROUP BY att.ZNOTE, att.ZTYPEUTI
+    """
+    cursor = conn.execute(query)
+
+    result: dict[int, dict[str, int]] = {}
+    for row in cursor:
+        note_id = row["note_id"]
+        type_uti = row["type_uti"]
+        count = row["count"]
+        if note_id not in result:
+            result[note_id] = {}
+        result[note_id][type_uti] = count
+
+    return result
 
 
 def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, str]:

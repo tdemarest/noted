@@ -102,6 +102,18 @@ def list(
         "-D",
         help="Search note content using FTS5 full-text search (requires --search).",
     ),
+    tree: bool = typer.Option(
+        False,
+        "--tree",
+        "-t",
+        help="Display as folder tree hierarchy.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show individual notes in tree view (requires --tree).",
+    ),
 ) -> None:
     """List all notes."""
     # Validate: --deep requires --search
@@ -109,10 +121,31 @@ def list(
         display.display_error("--deep requires --search to be specified.")
         raise typer.Exit(code=1)
 
+    # Validate: --verbose requires --tree
+    if verbose and not tree:
+        display.display_error("--verbose requires --tree to be specified.")
+        raise typer.Exit(code=1)
+
     try:
         conn = db.get_connection()
 
-        if deep and search_query:
+        if tree:
+            # Tree view mode
+            folders = db.get_folders(conn)
+
+            # Filter folders by name if specified
+            if folder:
+                folders = [f for f in folders if folder.lower() in f.path.lower()]
+
+            if verbose:
+                # Get notes for verbose display
+                notes = db.list_notes(conn, folder=folder, limit=limit, search=search_query)
+                attachment_types = db.get_all_attachment_types(conn)
+                display.display_notes_tree(folders, notes, attachment_types, verbose=True)
+            else:
+                display.display_notes_tree(folders, [], verbose=False)
+
+        elif deep and search_query:
             # Deep content search using FTS5
             results = search.search_notes(conn, search_query, folder=folder, limit=limit)
             display.display_search_results(results, search_query)
