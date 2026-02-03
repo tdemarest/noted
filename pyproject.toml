@@ -9,6 +9,7 @@ dependencies = [
     "loguru>=0.7",
     "betterproto>=2.0.0b6",
     "py7zr>=0.20.0",
+    "weasyprint>=68.0",
 ]
 
 [project.scripts]

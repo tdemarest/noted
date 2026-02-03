@@ -82,7 +82,7 @@ Now you can use `noted` directly with tab completion:
 
 ```bash
 noted list --<TAB>        # Shows: --folder, --limit, --search, --deep, --tree, --verbose
-noted view <TAB>          # Shows available options
+noted view --<TAB>        # Shows: --markdown, --json, --html, --pdf, --export
 noted export --<TAB>      # Shows: --all, --zip, --folder, --markdown, --json, --html
 ```
 
@@ -305,16 +305,21 @@ View a note's full content by ID or UUID:
 uv run noted view 42
 uv run noted view "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
 
-# Output formats
+# Output formats (to terminal)
 uv run noted view 42 --markdown
 uv run noted view 42 --json
 uv run noted view 42 --json-styled    # Include formatting metadata
 uv run noted view 42 --html
 
-# Export to file
-uv run noted view 42 --markdown -o ./my_note.md
-uv run noted view 42 --html -o ./note.html
+# Export to file (filename auto-generated from note title)
+uv run noted view 42 --export              # Creates "Note Title.txt"
+uv run noted view 42 --export --markdown   # Creates "Note Title.md"
+uv run noted view 42 --export --html       # Creates "Note Title.html"
+uv run noted view 42 --export --json       # Creates "Note Title.json"
+uv run noted view 42 --export --pdf        # Creates "Note Title.pdf"
 ```
+
+The `--export` flag writes to the current directory with filename based on the note title. The extension is automatically selected based on the format option.
 
 ### Debug Mode
 

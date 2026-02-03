@@ -308,17 +308,26 @@ def view(
         "--html",
         help="Output as standalone HTML5 document.",
     ),
-    export_path: Path | None = typer.Option(
-        None,
+    pdf: bool = typer.Option(
+        False,
+        "--pdf",
+        help="Output as PDF document (requires --export).",
+    ),
+    export: bool = typer.Option(
+        False,
         "--export",
         "-o",
-        help="Export to file (extension auto-selected based on format).",
+        help="Export to file (filename auto-generated from note title, extension based on format).",
     ),
 ) -> None:
     """View the full content of a note.
 
     For exporting notes with attachments, use the 'export' command instead.
     """
+    # Validate: --pdf requires --export (can't output binary to terminal)
+    if pdf and not export:
+        display.display_error("--pdf requires --export to write to a file.")
+        raise typer.Exit(code=1)
     try:
         conn = db.get_connection()
 
@@ -370,7 +379,13 @@ def view(
         conn.close()
 
         # Determine output format and get content
-        if json_output or json_styled:
+        output: str | None = None
+        output_bytes: bytes | None = None
+
+        if pdf:
+            output_bytes = display.get_note_pdf(note, content)
+            ext = ".pdf"
+        elif json_output or json_styled:
             output = display.get_note_json(note, content, include_styling=json_styled)
             ext = ".json"
         elif html:
@@ -384,10 +399,13 @@ def view(
             ext = ".txt"
 
         # Export to file or display
-        if export_path:
-            # Add extension if not provided
-            final_path = export_path if export_path.suffix else export_path.with_suffix(ext)
-            if output is not None:
+        if export:
+            # Auto-generate filename from note title
+            base_name = attachments.sanitize_filename(note.title)
+            final_path = Path.cwd() / f"{base_name}{ext}"
+            if output_bytes is not None:
+                final_path.write_bytes(output_bytes)
+            elif output is not None:
                 final_path.write_text(output, encoding="utf-8")
             else:
                 # For rich text, export as plain text

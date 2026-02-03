@@ -1822,6 +1822,30 @@ def display_note_html(note: Note, content: NoteContent) -> None:
     print(get_note_html(note, content))
 
 
+def get_note_pdf(note: Note, content: NoteContent) -> bytes:
+    """Get a note as a PDF document.
+
+    Converts HTML representation to PDF using WeasyPrint.
+
+    Args:
+        note: Note metadata (title, folder, dates).
+        content: Parsed note content.
+
+    Returns:
+        PDF document as bytes.
+
+    Raises:
+        RuntimeError: If PDF generation fails.
+    """
+    from weasyprint import HTML
+
+    html_content = get_note_html(note, content)
+    pdf_bytes = HTML(string=html_content).write_pdf()
+    if pdf_bytes is None:
+        raise RuntimeError("PDF generation failed")
+    return pdf_bytes
+
+
 def _note_to_html(
     content: NoteContent,
     table_lookup: dict[str, Table],
