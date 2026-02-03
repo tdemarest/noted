@@ -321,6 +321,8 @@ uv run noted view 42 --export --pdf        # Creates "Note Title.pdf"
 
 The `--export` flag writes to the current directory with filename based on the note title. The extension is automatically selected based on the format option.
 
+When a note has attachments, they are exported to a `Note Title_attachments/` folder alongside the main file, with a `manifest.json` listing all attachments.
+
 ### Debug Mode
 
 Show detailed note metadata (row ID, UUID, attachment stats):

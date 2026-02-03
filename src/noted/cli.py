@@ -376,8 +376,6 @@ def view(
                         table_data, summary = result
                         attachment.table = tables.parse_table_data(table_data, summary)
 
-        conn.close()
-
         # Determine output format and get content
         output: str | None = None
         output_bytes: bytes | None = None
@@ -411,10 +409,35 @@ def view(
                 # For rich text, export as plain text
                 final_path.write_text(content.text or "", encoding="utf-8")
             display.display_success(f"Exported to {final_path}")
+
+            # Export attachments alongside the file
+            if content.attachments:
+                att_result = attachments.export_attachments(
+                    conn=conn,
+                    attachments=content.attachments,
+                    output_dir=Path.cwd(),
+                    base_name=base_name,
+                    note=note,
+                )
+                if att_result.exported:
+                    display.display_success(f"Exported {len(att_result.exported)} attachments")
+                if att_result.skipped:
+                    from collections import Counter
+
+                    type_counts = Counter(
+                        protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown")
+                        for a in att_result.skipped
+                    )
+                    summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
+                    display.display_warning(
+                        f"Skipped {len(att_result.skipped)} non-exportable: {summary}"
+                    )
         elif output is not None:
             print(output)
         else:
             display.display_note_view(note, content)
+
+        conn.close()
 
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")
