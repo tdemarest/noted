@@ -38,6 +38,7 @@
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
+        <li><a href="#shell-completion">Shell Completion</a></li>
       </ul>
     </li>
     <li>
@@ -139,6 +140,46 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 3. Verify installation:
    ```bash
    uv run noted --help
+   ```
+
+4. (Optional) Set up shell completion for tab-completion support:
+
+   **Zsh** (default on macOS) - Add to your `~/.zshrc`:
+   ```zsh
+   # noted completion
+   _noted_completion() {
+     eval $(env _TYPER_COMPLETE_ARGS="${words[1,$CURRENT]}" _NOTED_COMPLETE=complete_zsh uv run noted)
+   }
+
+   noted() {
+       uv run noted "$@"
+   }
+
+   compdef _noted_completion noted
+   ```
+
+   **Bash** - Add to your `~/.bashrc`:
+   ```bash
+   # noted completion
+   _noted_completion() {
+       COMPREPLY=( $(env _TYPER_COMPLETE_ARGS="${COMP_WORDS[*]}" _NOTED_COMPLETE=complete_bash uv run noted) )
+   }
+
+   noted() {
+       uv run noted "$@"
+   }
+
+   complete -F _noted_completion noted
+   ```
+
+   After adding, reload your shell or run `source ~/.zshrc` (or `~/.bashrc`).
+
+   > **Note:** This uses a shell function instead of an alias. Aliases expand before completion runs, which breaks the completion registration.
+
+   Now you can use `noted` directly (without `uv run`) and get tab completion:
+   ```bash
+   noted list --<TAB>        # Shows: --folder, --limit, --search, --deep, --tree, --verbose
+   noted export <TAB>        # Shows note IDs and options
    ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

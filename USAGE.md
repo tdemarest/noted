@@ -5,6 +5,7 @@ A comprehensive guide to using the `noted` CLI tool for working with Apple Notes
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+  - [Shell Completion](#shell-completion-recommended)
 - [Listing Notes](#listing-notes)
 - [Tree View](#tree-view)
 - [Searching Notes](#searching-notes)
@@ -34,6 +35,56 @@ uv run noted --help
 ```
 
 The CLI automatically caches a copy of the Apple Notes database to `~/.cache/noted/` and refreshes it when the source database changes.
+
+### Shell Completion (Recommended)
+
+Set up tab-completion for a better command-line experience. This also creates a `noted` shell function so you can skip typing `uv run`.
+
+**Zsh** (default on macOS) - Add to your `~/.zshrc`:
+
+```zsh
+# noted completion
+_noted_completion() {
+  eval $(env _TYPER_COMPLETE_ARGS="${words[1,$CURRENT]}" _NOTED_COMPLETE=complete_zsh uv run noted)
+}
+
+noted() {
+    uv run noted "$@"
+}
+
+compdef _noted_completion noted
+```
+
+**Bash** - Add to your `~/.bashrc`:
+
+```bash
+# noted completion
+_noted_completion() {
+    COMPREPLY=( $(env _TYPER_COMPLETE_ARGS="${COMP_WORDS[*]}" _NOTED_COMPLETE=complete_bash uv run noted) )
+}
+
+noted() {
+    uv run noted "$@"
+}
+
+complete -F _noted_completion noted
+```
+
+After adding, reload your shell:
+
+```bash
+source ~/.zshrc   # or ~/.bashrc for Bash
+```
+
+> **Why a function instead of an alias?** Aliases expand before completion runs, breaking the completion registration. Shell functions preserve the command name that completion hooks expect.
+
+Now you can use `noted` directly with tab completion:
+
+```bash
+noted list --<TAB>        # Shows: --folder, --limit, --search, --deep, --tree, --verbose
+noted view <TAB>          # Shows available options
+noted export --<TAB>      # Shows: --all, --zip, --folder, --markdown, --json, --html
+```
 
 ---
 
