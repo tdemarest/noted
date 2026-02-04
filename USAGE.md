@@ -345,6 +345,8 @@ When a note has attachments:
   - HTML: Images become `<img>` tags, PDFs become `<a>` links
   - PDF: Same as HTML (images rendered inline, PDFs as clickable links)
 
+**Inline elements** like hashtags (`#template`) and mentions are displayed as plain text rather than attachment placeholders.
+
 ### Debug Mode
 
 Show detailed note metadata (row ID, UUID, attachment stats):

@@ -113,6 +113,9 @@ def _process_attachments(
             if type_name == "Table" and identifier:
                 # Use unique marker for tables to enable inline rendering
                 marker = f"[Table:{identifier}]"
+            elif type_name in ("Tag", "Mention") and title:
+                # Inline text attachments display as plain text (e.g., #template)
+                marker = title
             elif title:
                 if type_name == "Attachment":
                     # For unknown types, just show the filename

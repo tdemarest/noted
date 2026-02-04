@@ -793,18 +793,44 @@ def get_attachment_names(conn: sqlite3.Connection, note_id: int) -> dict[str, st
         note_id: The Z_PK of the note.
 
     Returns:
-        Mapping of attachment identifier (UUID) to title/filename.
-        Only includes attachments that have a title.
+        Mapping of attachment identifier (UUID) to title/filename/alttext.
+        Uses ZTITLE if available, falls back to ZALTTEXT (for hashtags).
+        Checks both ZNOTE and ZNOTE1 columns for linkage.
     """
-    query = """
-        SELECT ZIDENTIFIER, ZTITLE
-        FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZNOTE = ?
-          AND ZIDENTIFIER IS NOT NULL
-          AND ZTITLE IS NOT NULL
-    """
-    cursor = conn.execute(query, (note_id,))
-    return {row["ZIDENTIFIER"]: row["ZTITLE"] for row in cursor}
+    # Check if ZALTTEXT column exists (may not in test fixtures)
+    cursor = conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")
+    columns = {row[1] for row in cursor.fetchall()}
+    has_alttext = "ZALTTEXT" in columns
+    has_znote1 = "ZNOTE1" in columns
+
+    if has_alttext and has_znote1:
+        query = """
+            SELECT ZIDENTIFIER, COALESCE(ZTITLE, ZALTTEXT) as name
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE (ZNOTE = ? OR ZNOTE1 = ?)
+              AND ZIDENTIFIER IS NOT NULL
+              AND (ZTITLE IS NOT NULL OR ZALTTEXT IS NOT NULL)
+        """
+        cursor = conn.execute(query, (note_id, note_id))
+    elif has_alttext:
+        query = """
+            SELECT ZIDENTIFIER, COALESCE(ZTITLE, ZALTTEXT) as name
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE = ?
+              AND ZIDENTIFIER IS NOT NULL
+              AND (ZTITLE IS NOT NULL OR ZALTTEXT IS NOT NULL)
+        """
+        cursor = conn.execute(query, (note_id,))
+    else:
+        query = """
+            SELECT ZIDENTIFIER, ZTITLE as name
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE = ?
+              AND ZIDENTIFIER IS NOT NULL
+              AND ZTITLE IS NOT NULL
+        """
+        cursor = conn.execute(query, (note_id,))
+    return {row["ZIDENTIFIER"]: row["name"] for row in cursor}
 
 
 def get_attachment_stats(conn: sqlite3.Connection, note_id: int) -> dict[str, int | float]:

@@ -895,6 +895,12 @@ def _render_formatted_content(
                     console.print(rich_table)
                 elif att.type_uti == "com.apple.notes.table":
                     console.print("[Table]", end="")
+                elif att.type_uti in (
+                    "com.apple.notes.inlinetextattachment.hashtag",
+                    "com.apple.notes.inlinetextattachment.mention",
+                ) and att.title:
+                    # Inline text attachments display as plain text
+                    console.print(att.title, end="")
                 elif att.title:
                     # Show filename for non-table attachments
                     console.print(f"[{att.title}]", end="")
@@ -1251,6 +1257,12 @@ def note_to_markdown(
                         lines.append(table_to_markdown(table_lookup[att.identifier]))
                     else:
                         lines.append("[Table]")
+                elif att.type_uti in (
+                    "com.apple.notes.inlinetextattachment.hashtag",
+                    "com.apple.notes.inlinetextattachment.mention",
+                ) and att.title:
+                    # Inline text attachments display as plain text
+                    lines.append(att.title)
                 else:
                     # Output marker with type and title for linking
                     type_name = _attachment_type_name(att.type_uti)

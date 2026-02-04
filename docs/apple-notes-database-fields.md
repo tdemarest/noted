@@ -244,6 +244,23 @@ Common `ZTYPEUTI` values found in Apple Notes:
 | `public.mpeg-4` | MP4 video | Low |
 | `public.python-script` | Python files | Rare |
 | `com.apple.drawing.2` | Apple Pencil drawings | Rare |
+| `com.apple.notes.inlinetextattachment.hashtag` | Hashtags (#template) | Medium |
+| `com.apple.notes.inlinetextattachment.mention` | @mentions | Low |
+
+### Inline Text Attachments (Hashtags and Mentions)
+
+Hashtags and mentions are stored as inline attachments (entity 9: `ICInlineAttachment`).
+Unlike regular attachments, they are linked to notes via `ZNOTE1` instead of `ZNOTE`.
+
+| Column | Description |
+|--------|-------------|
+| `ZNOTE1` | Foreign key to the note (not ZNOTE) |
+| `ZALTTEXT` | The hashtag or mention text (e.g., `#template`) |
+| `ZTYPEUTI1` | UTI in protobuf (not in ZTYPEUTI column) |
+| `ZTOKENCONTENTIDENTIFIER` | Normalized tag name (e.g., `TEMPLATE`) |
+
+The UTI type (`com.apple.notes.inlinetextattachment.hashtag`) is stored in the protobuf
+content, not in the `ZTYPEUTI` column.
 
 ### Example Query: Large Attachments
 
