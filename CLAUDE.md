@@ -128,6 +128,8 @@ conn = sqlite3.connect('file:path/to/db.sqlite?mode=ro', uri=True)
 ```
 
 - Never truncate data in report output - all text must be visible
+- Never use personal identifiable (PII) or sensitive information in documentation,
+examples, code comments, etc.
 
 Note: Apple uses Core Data timestamps (seconds since Jan 1, 2001), so you add 978307200 to convert to Unix epoch.
 

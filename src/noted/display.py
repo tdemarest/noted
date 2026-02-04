@@ -151,6 +151,38 @@ def _categorize_attachment(uti: str) -> str:
     return "Generic"
 
 
+# UTI to human-readable type name for attachment markers
+_UTI_TYPE_NAMES: dict[str, str] = {
+    "public.jpeg": "Image",
+    "public.png": "Image",
+    "public.heic": "Image",
+    "public.gif": "Image",
+    "public.tiff": "Image",
+    "com.compuserve.gif": "Image",
+    "com.adobe.pdf": "PDF",
+    "public.pdf": "PDF",
+    "com.apple.drawing": "Drawing",
+    "com.apple.drawing.2": "Drawing",
+    "public.url": "Link",
+    "com.apple.mapkit.map-item": "Map",
+    "public.vcard": "Contact",
+    "com.apple.notes.table": "Table",
+    "com.apple.notes.gallery": "Gallery",
+}
+
+
+def _attachment_type_name(uti: str) -> str:
+    """Get human-readable type name for a UTI.
+
+    Args:
+        uti: Uniform Type Identifier string.
+
+    Returns:
+        Human-readable type name (e.g., 'Image', 'PDF').
+    """
+    return _UTI_TYPE_NAMES.get(uti, "Attachment")
+
+
 def _format_attachment_icons(type_counts: dict[str, int]) -> str:
     """Format attachment types as consolidated icons.
 
@@ -1178,12 +1210,8 @@ def note_to_markdown(
     # Object replacement character used by Apple Notes for attachments
     object_replacement_char = "\ufffc"
 
-    # Build list of table attachments in order for matching U+FFFC occurrences
-    table_attachments: list[str] = []
-    if content.attachments:
-        for att in content.attachments:
-            if att.type_uti == "com.apple.notes.table":
-                table_attachments.append(att.identifier)
+    # Build ordered list of all attachments for matching U+FFFC occurrences
+    all_attachments = content.attachments or []
     attachment_index = 0
 
     lines: list[str] = []
@@ -1204,14 +1232,22 @@ def note_to_markdown(
             if current_line:
                 lines.append(current_line)
                 current_line = ""
-            # Look up table by attachment order
-            if attachment_index < len(table_attachments):
-                identifier = table_attachments[attachment_index]
+            # Look up attachment by order
+            if attachment_index < len(all_attachments):
+                att = all_attachments[attachment_index]
                 attachment_index += 1
-                if identifier in table_lookup:
-                    lines.append(table_to_markdown(table_lookup[identifier]))
+                if att.type_uti == "com.apple.notes.table":
+                    if att.identifier in table_lookup:
+                        lines.append(table_to_markdown(table_lookup[att.identifier]))
+                    else:
+                        lines.append("[Table]")
                 else:
-                    lines.append("[Table]")
+                    # Output marker with type and title for linking
+                    type_name = _attachment_type_name(att.type_uti)
+                    if att.title:
+                        lines.append(f"[{type_name}: {att.title}]")
+                    else:
+                        lines.append(f"[{type_name}]")
             else:
                 lines.append("[Attachment]")
             i += 1
@@ -1579,15 +1615,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
             if att.table is not None:
                 table_lookup[att.identifier] = att.table
 
-    # Build table identifiers list for U+FFFC handling
-    table_identifiers: list[str] = []
-    if content.attachments:
-        for att in content.attachments:
-            if att.type_uti == "com.apple.notes.table":
-                table_identifiers.append(att.identifier)
-
     # Convert content to HTML
-    body_html = _note_to_html(content, table_lookup, table_identifiers)
+    body_html = _note_to_html(content, table_lookup)
 
     # Format metadata
     folder_str = note.folder or "No Folder"
@@ -1846,17 +1875,134 @@ def get_note_pdf(note: Note, content: NoteContent) -> bytes:
     return pdf_bytes
 
 
+# Image UTIs that should be rendered as inline images
+_IMAGE_UTIS = {
+    "public.jpeg",
+    "public.png",
+    "public.heic",
+    "public.gif",
+    "public.tiff",
+    "com.compuserve.gif",
+    "com.apple.drawing",
+    "com.apple.drawing.2",
+}
+
+
+def link_attachments_html(
+    content: str,
+    exported_attachments: list[tuple[str, str, str]],
+    attachments_dir: str,
+) -> str:
+    """Replace attachment markers with HTML links/images.
+
+    Args:
+        content: HTML content with markers like [Image: name] or [PDF: file.pdf].
+        exported_attachments: List of (identifier, filename, type_uti) tuples.
+        attachments_dir: Relative path to attachments directory.
+
+    Returns:
+        HTML with attachment markers replaced by proper elements.
+    """
+    if not exported_attachments:
+        return content
+
+    result = content
+
+    for _identifier, filename, type_uti in exported_attachments:
+        if not filename:
+            continue
+
+        # URL-encode the path for href/src attributes
+        encoded_path = html.escape(f"{attachments_dir}/{filename}")
+        display_name = html.escape(filename)
+
+        # Build the pattern to match - escape regex special chars in filename
+        # Match both [Type: filename] and [Type: title] patterns
+        name_without_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
+        escaped_filename = re.escape(html.escape(filename))
+        escaped_name = re.escape(html.escape(name_without_ext))
+
+        if type_uti in _IMAGE_UTIS:
+            # Replace [Image: X] with <img> tag
+            img_style = "max-width: 100%; height: auto;"
+            replacement = f'<img src="{encoded_path}" alt="{display_name}" style="{img_style}">'
+            # Try full filename first, then name without extension
+            pattern = rf"\[Image: {escaped_filename}\]"
+            result = re.sub(pattern, replacement, result)
+            pattern = rf"\[Image: {escaped_name}\]"
+            result = re.sub(pattern, replacement, result)
+        else:
+            # Replace [PDF: X], [Attachment: X], etc. with <a> tag
+            replacement = f'<a href="{encoded_path}">📄 {display_name}</a>'
+            # Match any type prefix
+            pattern = rf"\[\w+: {escaped_filename}\]"
+            result = re.sub(pattern, replacement, result)
+            pattern = rf"\[\w+: {escaped_name}\]"
+            result = re.sub(pattern, replacement, result)
+
+    return result
+
+
+def link_attachments_markdown(
+    content: str,
+    exported_attachments: list[tuple[str, str, str]],
+    attachments_dir: str,
+) -> str:
+    """Replace attachment markers with Markdown links/images.
+
+    Args:
+        content: Markdown content with markers like [Image: name] or [PDF: file.pdf].
+        exported_attachments: List of (identifier, filename, type_uti) tuples.
+        attachments_dir: Relative path to attachments directory.
+
+    Returns:
+        Markdown with attachment markers replaced by proper syntax.
+    """
+    if not exported_attachments:
+        return content
+
+    result = content
+
+    for _identifier, filename, type_uti in exported_attachments:
+        if not filename:
+            continue
+
+        # URL-encode spaces and special chars for markdown links
+        encoded_path = filename.replace(" ", "%20")
+        full_path = f"{attachments_dir}/{encoded_path}"
+
+        # Build patterns - match the filename or name without extension
+        name_without_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
+        escaped_filename = re.escape(filename)
+        escaped_name = re.escape(name_without_ext)
+
+        if type_uti in _IMAGE_UTIS:
+            # Replace [Image: X] with ![alt](path)
+            replacement = f"![{filename}]({full_path})"
+            pattern = rf"\[Image: {escaped_filename}\]"
+            result = re.sub(pattern, replacement, result)
+            pattern = rf"\[Image: {escaped_name}\]"
+            result = re.sub(pattern, replacement, result)
+        else:
+            # Replace [PDF: X], etc. with [filename](path)
+            replacement = f"[📄 {filename}]({full_path})"
+            pattern = rf"\[\w+: {escaped_filename}\]"
+            result = re.sub(pattern, replacement, result)
+            pattern = rf"\[\w+: {escaped_name}\]"
+            result = re.sub(pattern, replacement, result)
+
+    return result
+
+
 def _note_to_html(
     content: NoteContent,
     table_lookup: dict[str, Table],
-    table_identifiers: list[str],
 ) -> str:
     """Convert note content to HTML body content.
 
     Args:
         content: Parsed note content with formatted runs.
         table_lookup: Mapping of table identifier to parsed Table.
-        table_identifiers: Ordered list of table attachment identifiers.
 
     Returns:
         HTML string for the note body.
@@ -1866,6 +2012,9 @@ def _note_to_html(
 
     # Object replacement character
     object_replacement_char = "\ufffc"
+
+    # Build ordered list of all attachments for matching U+FFFC occurrences
+    all_attachments = content.attachments or []
     attachment_index = 0
 
     lines: list[str] = []
@@ -1909,15 +2058,24 @@ def _note_to_html(
         style = run.text_style
         para_type = para.paragraph_type if para else None
 
-        # Handle attachment placeholders (U+FFFC) - tables
+        # Handle attachment placeholders (U+FFFC)
         if object_replacement_char in text:
             flush_paragraph()
             flush_list()
-            if attachment_index < len(table_identifiers):
-                identifier = table_identifiers[attachment_index]
+            if attachment_index < len(all_attachments):
+                att = all_attachments[attachment_index]
                 attachment_index += 1
-                if identifier in table_lookup:
-                    lines.append(_table_to_html(table_lookup[identifier]))
+                if att.type_uti == "com.apple.notes.table":
+                    if att.identifier in table_lookup:
+                        lines.append(_table_to_html(table_lookup[att.identifier]))
+                else:
+                    # Output marker with type and title for linking
+                    type_name = _attachment_type_name(att.type_uti)
+                    if att.title:
+                        marker = f"[{type_name}: {html.escape(att.title)}]"
+                    else:
+                        marker = f"[{type_name}]"
+                    lines.append(f"            <p>{marker}</p>")
             i += 1
             continue
 

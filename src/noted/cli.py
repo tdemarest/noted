@@ -376,41 +376,26 @@ def view(
                         table_data, summary = result
                         attachment.table = tables.parse_table_data(table_data, summary)
 
-        # Determine output format and get content
-        output: str | None = None
-        output_bytes: bytes | None = None
-
+        # Determine file extension based on format
         if pdf:
-            output_bytes = display.get_note_pdf(note, content)
             ext = ".pdf"
         elif json_output or json_styled:
-            output = display.get_note_json(note, content, include_styling=json_styled)
             ext = ".json"
         elif html:
-            output = display.get_note_html(note, content)
             ext = ".html"
         elif markdown:
-            output = display.get_note_markdown(note, content)
             ext = ".md"
         else:
-            output = None  # Rich text display handled separately
             ext = ".txt"
 
         # Export to file or display
         if export:
             # Auto-generate filename from note title
             base_name = attachments.sanitize_filename(note.title)
-            final_path = Path.cwd() / f"{base_name}{ext}"
-            if output_bytes is not None:
-                final_path.write_bytes(output_bytes)
-            elif output is not None:
-                final_path.write_text(output, encoding="utf-8")
-            else:
-                # For rich text, export as plain text
-                final_path.write_text(content.text or "", encoding="utf-8")
-            display.display_success(f"Exported to {final_path}")
+            attachments_dir = f"{base_name}_attachments"
 
-            # Export attachments alongside the file
+            # Export attachments first to get filename mappings
+            exported_atts: list[tuple[str, str, str]] = []
             if content.attachments:
                 att_result = attachments.export_attachments(
                     conn=conn,
@@ -419,6 +404,13 @@ def view(
                     base_name=base_name,
                     note=note,
                 )
+                # Build list of (identifier, filename, type_uti) for linking
+                for exp_att in att_result.exported:
+                    if exp_att.filename:
+                        exported_atts.append(
+                            (exp_att.identifier, exp_att.filename, exp_att.type_uti)
+                        )
+
                 if att_result.exported:
                     display.display_success(f"Exported {len(att_result.exported)} attachments")
                 if att_result.skipped:
@@ -432,10 +424,59 @@ def view(
                     display.display_warning(
                         f"Skipped {len(att_result.skipped)} non-exportable: {summary}"
                     )
-        elif output is not None:
-            print(output)
+
+            # Generate content with linked attachments
+            output: str | None = None
+            output_bytes: bytes | None = None
+
+            if pdf:
+                # Generate HTML with linked attachments, then convert to PDF
+                html_content = display.get_note_html(note, content)
+                if exported_atts:
+                    html_content = display.link_attachments_html(
+                        html_content, exported_atts, attachments_dir
+                    )
+                from weasyprint import HTML
+
+                pdf_result = HTML(string=html_content).write_pdf()
+                if pdf_result is None:
+                    raise RuntimeError("PDF generation failed")
+                output_bytes = pdf_result
+            elif json_output or json_styled:
+                output = display.get_note_json(note, content, include_styling=json_styled)
+            elif html:
+                output = display.get_note_html(note, content)
+                if exported_atts:
+                    output = display.link_attachments_html(
+                        output, exported_atts, attachments_dir
+                    )
+            elif markdown:
+                output = display.get_note_markdown(note, content)
+                if exported_atts:
+                    output = display.link_attachments_markdown(
+                        output, exported_atts, attachments_dir
+                    )
+            else:
+                # Plain text - no linking
+                output = content.text or ""
+
+            # Write to file
+            final_path = Path.cwd() / f"{base_name}{ext}"
+            if output_bytes is not None:
+                final_path.write_bytes(output_bytes)
+            else:
+                final_path.write_text(output or "", encoding="utf-8")
+            display.display_success(f"Exported to {final_path}")
         else:
-            display.display_note_view(note, content)
+            # Terminal display (no export)
+            if json_output or json_styled:
+                print(display.get_note_json(note, content, include_styling=json_styled))
+            elif html:
+                print(display.get_note_html(note, content))
+            elif markdown:
+                print(display.get_note_markdown(note, content))
+            else:
+                display.display_note_view(note, content)
 
         conn.close()
 
