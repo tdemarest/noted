@@ -14,6 +14,7 @@ from rich.tree import Tree
 
 from noted.db import FolderInfo
 from noted.models import (
+    Attachment,
     DatabaseStats,
     FormattedRun,
     Note,
@@ -833,17 +834,14 @@ def display_note_view(note: Note, content: NoteContent) -> None:
 
     # Build attachment lookup for inline rendering
     table_lookup: dict[str, Table] = {}
-    table_identifiers: list[str] = []
-    if content.attachments:
-        for att in content.attachments:
-            if att.type_uti == "com.apple.notes.table":
-                table_identifiers.append(att.identifier)
-                if att.table is not None:
-                    table_lookup[att.identifier] = att.table
+    attachments_list: list[Attachment] = content.attachments or []
+    for att in attachments_list:
+        if att.type_uti == "com.apple.notes.table" and att.table is not None:
+            table_lookup[att.identifier] = att.table
 
     # Use formatted rendering if available
     if content.formatted_runs:
-        _render_formatted_content(content.formatted_runs, table_lookup, table_identifiers)
+        _render_formatted_content(content.formatted_runs, table_lookup, attachments_list)
     elif content.text:
         _render_text_with_tables(content.text, table_lookup)
     else:
@@ -853,14 +851,14 @@ def display_note_view(note: Note, content: NoteContent) -> None:
 def _render_formatted_content(
     runs: list[FormattedRun],
     table_lookup: dict[str, Table],
-    table_identifiers: list[str],
+    attachments_list: list[Attachment],
 ) -> None:
     """Render formatted content with rich styling.
 
     Args:
         runs: List of formatted text runs.
         table_lookup: Mapping of table identifier to parsed Table.
-        table_identifiers: Ordered list of table attachment identifiers.
+        attachments_list: Ordered list of all attachments in the note.
     """
     # Object replacement character used by Apple Notes for attachments
     object_replacement_char = "\ufffc"
@@ -880,16 +878,22 @@ def _render_formatted_content(
         style = run.text_style
         para_type = para.paragraph_type if para else None
 
-        # Handle attachment placeholders (U+FFFC) - tables
+        # Handle attachment placeholders (U+FFFC) - tables and other attachments
         if object_replacement_char in text:
-            if attachment_index < len(table_identifiers):
-                identifier = table_identifiers[attachment_index]
+            if attachment_index < len(attachments_list):
+                att = attachments_list[attachment_index]
                 attachment_index += 1
-                if identifier in table_lookup:
-                    rich_table = table_to_rich(table_lookup[identifier])
+                if att.identifier in table_lookup:
+                    # Render table inline
+                    rich_table = table_to_rich(table_lookup[att.identifier])
                     console.print(rich_table)
-                else:
+                elif att.type_uti == "com.apple.notes.table":
                     console.print("[Table]", end="")
+                elif att.title:
+                    # Show filename for non-table attachments
+                    console.print(f"[{att.title}]", end="")
+                else:
+                    console.print("[Attachment]", end="")
             else:
                 console.print("[Attachment]", end="")
             i += 1
@@ -1245,7 +1249,12 @@ def note_to_markdown(
                     # Output marker with type and title for linking
                     type_name = _attachment_type_name(att.type_uti)
                     if att.title:
-                        lines.append(f"[{type_name}: {att.title}]")
+                        if type_name == "Attachment":
+                            # For unknown types, just show the filename
+                            lines.append(f"[{att.title}]")
+                        else:
+                            # For known types, show type + filename
+                            lines.append(f"[{type_name}: {att.title}]")
                     else:
                         lines.append(f"[{type_name}]")
             else:

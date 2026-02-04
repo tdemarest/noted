@@ -114,7 +114,12 @@ def _process_attachments(
                 # Use unique marker for tables to enable inline rendering
                 marker = f"[Table:{identifier}]"
             elif title:
-                marker = f"[{type_name}: {title}]"
+                if type_name == "Attachment":
+                    # For unknown types, just show the filename
+                    marker = f"[{title}]"
+                else:
+                    # For known types (PDF, Image, etc.), show type + filename
+                    marker = f"[{type_name}: {title}]"
             else:
                 marker = f"[{type_name}]"
             run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, marker)
