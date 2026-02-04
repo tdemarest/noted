@@ -686,6 +686,135 @@ def get_folder_paths(conn: sqlite3.Connection) -> dict[int, str]:
     return folder_paths
 
 
+def _count_smart_folder_notes(
+    conn: sqlite3.Connection,
+    query_json: str | None,
+) -> int:
+    """Count notes matching a Smart Folder query.
+
+    Smart Folders use JSON queries stored in ZSMARTFOLDERQUERYJSON.
+    This function parses and evaluates the query to count matching notes.
+
+    Supported query conditions:
+    - tag: Match notes with a specific hashtag
+    - pinned: Match pinned notes
+    - deleted: Match deleted/non-deleted notes
+    - modificationDateRelativeRange: Match notes modified within a time range
+
+    Args:
+        conn: Database connection.
+        query_json: JSON string containing the Smart Folder query.
+
+    Returns:
+        Number of notes matching the query, or 0 if query cannot be evaluated.
+    """
+    import json
+
+    if not query_json:
+        return 0
+
+    try:
+
+        query = json.loads(query_json)
+
+        # Extract conditions from the query structure
+        # Format: {"entity": "note", "type": {"and": [conditions...]}}
+        if query.get("entity") != "note":
+            return 0
+
+        type_clause = query.get("type", {})
+        conditions = type_clause.get("and", [])
+
+        # Flatten nested "and" conditions
+        flat_conditions: list[dict] = []
+        for cond in conditions:
+            if "and" in cond:
+                flat_conditions.extend(cond["and"])
+            else:
+                flat_conditions.append(cond)
+
+        # Build SQL conditions
+        sql_conditions = ["n.ZTITLE1 IS NOT NULL"]  # Must be a note
+        params: list = []
+
+        for cond in flat_conditions:
+            if "tag" in cond:
+                # Tag query: join with hashtag attachments
+                tag_name = cond["tag"]
+                sql_conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM ZICCLOUDSYNCINGOBJECT tag
+                        WHERE tag.ZNOTE1 = n.Z_PK
+                        AND tag.ZTYPEUTI1 = 'com.apple.notes.inlinetextattachment.hashtag'
+                        AND tag.ZTOKENCONTENTIDENTIFIER = ?
+                    )
+                """)
+                params.append(tag_name.upper())
+
+            elif "pinned" in cond:
+                # Pinned query
+                if cond["pinned"]:
+                    sql_conditions.append("n.ZISPINNED = 1")
+                else:
+                    sql_conditions.append("(n.ZISPINNED = 0 OR n.ZISPINNED IS NULL)")
+
+            elif "deleted" in cond:
+                # Deleted query
+                if cond["deleted"]:
+                    sql_conditions.append("n.ZMARKEDFORDELETION = 1")
+                else:
+                    sql_conditions.append(
+                        "(n.ZMARKEDFORDELETION != 1 OR n.ZMARKEDFORDELETION IS NULL)"
+                    )
+
+            elif "modificationDateRelativeRange" in cond:
+                # Date range query
+                range_spec = cond["modificationDateRelativeRange"]
+                custom_amount = range_spec.get("customAmount", 1)
+                custom_unit = range_spec.get("customUnit", 0)
+
+                # Calculate the threshold date
+                # Custom units: 0=minutes, 1=hours, 2=days, 3=weeks, 4=months, 5=years
+                now = datetime.now(UTC)
+
+                if custom_unit == 0:  # minutes
+                    delta = timedelta(minutes=custom_amount)
+                elif custom_unit == 1:  # hours
+                    delta = timedelta(hours=custom_amount)
+                elif custom_unit == 2:  # days
+                    delta = timedelta(days=custom_amount)
+                elif custom_unit == 3:  # weeks
+                    delta = timedelta(weeks=custom_amount)
+                elif custom_unit == 4:  # months (approximate)
+                    delta = timedelta(days=custom_amount * 30)
+                elif custom_unit == 5:  # years (approximate)
+                    delta = timedelta(days=custom_amount * 365)
+                else:
+                    delta = timedelta(days=custom_amount)
+
+                threshold = now - delta
+                # Convert to Apple timestamp (seconds since 2001-01-01)
+                apple_threshold = (threshold - APPLE_EPOCH).total_seconds()
+
+                sql_conditions.append("n.ZMODIFICATIONDATE1 >= ?")
+                params.append(apple_threshold)
+
+        # Build and execute the count query
+        sql = f"""
+            SELECT COUNT(DISTINCT n.Z_PK)
+            FROM ZICCLOUDSYNCINGOBJECT n
+            WHERE {' AND '.join(sql_conditions)}
+        """
+
+        cursor = conn.execute(sql, params)
+        result = cursor.fetchone()
+        return result[0] if result else 0
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.debug(f"Failed to evaluate Smart Folder query: {e}")
+        return 0
+
+
 def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
     """Get all folders with their note counts and full paths.
 
@@ -703,19 +832,23 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
     columns = {row[1] for row in cursor.fetchall()}
     has_folder_type = "ZFOLDERTYPE" in columns
 
+    has_smart_folder_query = "ZSMARTFOLDERQUERYJSON" in columns
+
     if has_folder_type:
+        # Include Smart Folder query JSON for dynamic count calculation
         query = """
             SELECT
                 f.Z_PK as id,
                 f.ZTITLE2 as name,
                 f.ZIDENTIFIER as identifier,
                 COALESCE(f.ZFOLDERTYPE, 0) as folder_type,
-                COUNT(n.Z_PK) as note_count
+                COUNT(n.Z_PK) as note_count,
+                f.ZSMARTFOLDERQUERYJSON as smart_query
             FROM ZICCLOUDSYNCINGOBJECT f
             LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
                 AND n.ZTITLE1 IS NOT NULL
             WHERE f.ZTITLE2 IS NOT NULL
-            GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER, f.ZFOLDERTYPE
+            GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER, f.ZFOLDERTYPE, f.ZSMARTFOLDERQUERYJSON
             ORDER BY f.ZTITLE2
         """
     else:
@@ -725,7 +858,8 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
                 f.ZTITLE2 as name,
                 f.ZIDENTIFIER as identifier,
                 0 as folder_type,
-                COUNT(n.Z_PK) as note_count
+                COUNT(n.Z_PK) as note_count,
+                NULL as smart_query
             FROM ZICCLOUDSYNCINGOBJECT f
             LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
                 AND n.ZTITLE1 IS NOT NULL
@@ -735,16 +869,26 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
         """
 
     cursor = conn.execute(query)
-    folders = [
-        FolderInfo(
-            name=row["name"],
-            identifier=row["identifier"] or "",
-            note_count=row["note_count"],
-            path=folder_paths.get(row["id"], row["name"]),
-            folder_type=row["folder_type"],
+    folders = []
+    for row in cursor:
+        folder_type = row["folder_type"]
+        note_count = row["note_count"]
+
+        # For Smart Folders (type 2), calculate the count dynamically
+        if folder_type == 2 and has_smart_folder_query:
+            smart_query = row["smart_query"]
+            if smart_query:
+                note_count = _count_smart_folder_notes(conn, smart_query)
+
+        folders.append(
+            FolderInfo(
+                name=row["name"],
+                identifier=row["identifier"] or "",
+                note_count=note_count,
+                path=folder_paths.get(row["id"], row["name"]),
+                folder_type=folder_type,
+            )
         )
-        for row in cursor
-    ]
     # Sort by full path for proper hierarchy ordering
     return sorted(folders, key=lambda f: f.path.lower())
 

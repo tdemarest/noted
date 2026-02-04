@@ -399,6 +399,118 @@ The JSON structure supports various query types:
 }
 ```
 
+### Smart Folder Query Conditions
+
+| Condition | Description | Database Equivalent |
+|-----------|-------------|---------------------|
+| `{"tag": "NAME"}` | Notes with hashtag #NAME | Join with hashtag attachments where `ZTOKENCONTENTIDENTIFIER = 'NAME'` |
+| `{"pinned": true}` | Pinned notes | `ZISPINNED = 1` |
+| `{"pinned": false}` | Unpinned notes | `ZISPINNED = 0 OR ZISPINNED IS NULL` |
+| `{"deleted": true}` | Deleted notes | `ZMARKEDFORDELETION = 1` |
+| `{"deleted": false}` | Non-deleted notes | `ZMARKEDFORDELETION != 1 OR ZMARKEDFORDELETION IS NULL` |
+| `{"modificationDateRelativeRange": {...}}` | Recently modified | `ZMODIFICATIONDATE1 >= threshold` |
+
+### Date Range Units (modificationDateRelativeRange)
+
+The `customUnit` field specifies the time unit:
+
+| customUnit | Unit |
+|------------|------|
+| 0 | Minutes |
+| 1 | Hours |
+| 2 | Days |
+| 3 | Weeks |
+| 4 | Months |
+| 5 | Years |
+
+**Important**: Smart Folders do NOT use the `ZFOLDER` foreign key relationship. Notes are dynamically matched based on the query criteria. To count notes in a Smart Folder, you must evaluate the query against all notes.
+
+### Example Query: Count Notes in a Tag-based Smart Folder
+
+```sql
+-- Count notes with #TEMPLATE tag (not deleted)
+SELECT COUNT(DISTINCT n.Z_PK) as count
+FROM ZICCLOUDSYNCINGOBJECT n
+JOIN ZICCLOUDSYNCINGOBJECT tag ON tag.ZNOTE1 = n.Z_PK
+WHERE tag.ZTYPEUTI1 = 'com.apple.notes.inlinetextattachment.hashtag'
+  AND tag.ZTOKENCONTENTIDENTIFIER = 'TEMPLATE'
+  AND n.ZTITLE1 IS NOT NULL
+  AND (n.ZMARKEDFORDELETION != 1 OR n.ZMARKEDFORDELETION IS NULL);
+```
+
+### Example Query: Count Pinned Notes
+
+```sql
+-- Count pinned notes (not deleted)
+SELECT COUNT(DISTINCT n.Z_PK) as count
+FROM ZICCLOUDSYNCINGOBJECT n
+WHERE n.ZTITLE1 IS NOT NULL
+  AND n.ZISPINNED = 1
+  AND (n.ZMARKEDFORDELETION != 1 OR n.ZMARKEDFORDELETION IS NULL);
+```
+
+## Hashtags (Tags)
+
+Hashtags in Apple Notes (e.g., `#TEMPLATE`, `#TODO`) are stored as **inline text attachments**, not as plain text in the note content. They use a special relationship structure.
+
+### Hashtag Storage Structure
+
+| Column | Type | Description | Example |
+|--------|------|-------------|---------|
+| `ZNOTE1` | INTEGER | Foreign key to the parent note | `4221` |
+| `ZTYPEUTI1` | VARCHAR | UTI type identifier | `com.apple.notes.inlinetextattachment.hashtag` |
+| `ZALTTEXT` | VARCHAR | The hashtag with `#` prefix | `#TEMPLATE` |
+| `ZTOKENCONTENTIDENTIFIER` | VARCHAR | Normalized tag name (uppercase, no `#`) | `TEMPLATE` |
+| `ZIDENTIFIER` | VARCHAR | UUID for the attachment | `4880A794-EC99-4F2F-...` |
+
+**Key Points:**
+- Hashtags are entity type 9 (`ICInlineAttachment`)
+- They link to notes via `ZNOTE1` (not `ZNOTE`)
+- The UTI `com.apple.notes.inlinetextattachment.hashtag` identifies hashtags
+- `ZTOKENCONTENTIDENTIFIER` stores the normalized tag name for querying
+- The hashtag also appears in the protobuf content as an attachment marker
+
+### Example Query: Find All Hashtags
+
+```sql
+SELECT
+    tag.ZALTTEXT as hashtag,
+    tag.ZTOKENCONTENTIDENTIFIER as tag_name,
+    n.ZTITLE1 as note_title,
+    n.Z_PK as note_id
+FROM ZICCLOUDSYNCINGOBJECT tag
+JOIN ZICCLOUDSYNCINGOBJECT n ON tag.ZNOTE1 = n.Z_PK
+WHERE tag.ZTYPEUTI1 = 'com.apple.notes.inlinetextattachment.hashtag'
+  AND n.ZMARKEDFORDELETION != 1
+ORDER BY tag.ZTOKENCONTENTIDENTIFIER, n.ZTITLE1;
+```
+
+### Example Query: Notes with Specific Tag
+
+```sql
+SELECT n.Z_PK, n.ZTITLE1 as title
+FROM ZICCLOUDSYNCINGOBJECT n
+JOIN ZICCLOUDSYNCINGOBJECT tag ON tag.ZNOTE1 = n.Z_PK
+WHERE tag.ZTYPEUTI1 = 'com.apple.notes.inlinetextattachment.hashtag'
+  AND tag.ZTOKENCONTENTIDENTIFIER = 'TODO'  -- Tag name without #, uppercase
+  AND n.ZMARKEDFORDELETION != 1
+ORDER BY n.ZMODIFICATIONDATE1 DESC;
+```
+
+### Example Query: List All Unique Tags with Counts
+
+```sql
+SELECT
+    tag.ZTOKENCONTENTIDENTIFIER as tag_name,
+    COUNT(DISTINCT tag.ZNOTE1) as note_count
+FROM ZICCLOUDSYNCINGOBJECT tag
+JOIN ZICCLOUDSYNCINGOBJECT n ON tag.ZNOTE1 = n.Z_PK
+WHERE tag.ZTYPEUTI1 = 'com.apple.notes.inlinetextattachment.hashtag'
+  AND n.ZMARKEDFORDELETION != 1
+GROUP BY tag.ZTOKENCONTENTIDENTIFIER
+ORDER BY note_count DESC;
+```
+
 ## Account Information
 
 ### Fields in ZICCLOUDSYNCINGOBJECT
