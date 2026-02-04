@@ -119,6 +119,8 @@ def _highlight_match(text: str, search: str) -> Text:
 # Tree view icons
 TREE_ICONS = {
     "folder": "📁",
+    "folder_smart": "🔎",
+    "folder_system": "⚙️",
     "trash": "🗑️",
     "note": "📄",
     "locked": "🔒",
@@ -254,16 +256,20 @@ def display_notes_tree(
             current_path = "/".join(parts[: i + 1])
 
             if current_path not in folder_nodes:
-                # Choose icon based on folder name
-                is_trash = part == "Recently Deleted"
-                icon = TREE_ICONS["trash"] if is_trash else TREE_ICONS["folder"]
-
                 # This is the folder we're adding
                 if current_path == path:
+                    # Choose icon based on folder type
+                    if folder.folder_type == 2:
+                        icon = TREE_ICONS["folder_smart"]
+                    elif folder.folder_type == 1:
+                        icon = TREE_ICONS["folder_system"]
+                    else:
+                        icon = TREE_ICONS["folder"]
                     # This is the actual folder entry
                     label = f"{icon} {part} [dim]({folder.note_count})[/dim]"
                 else:
                     # Intermediate folder not in our list, show without count
+                    icon = TREE_ICONS["folder"]
                     label = f"{icon} {part}"
 
                 new_node = current_node.add(label)

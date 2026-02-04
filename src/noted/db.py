@@ -23,12 +23,14 @@ class FolderInfo:
         identifier: Folder UUID.
         note_count: Number of notes in folder.
         path: Full path from root (e.g., "Hobbies/Photography/Landscape Photos").
+        folder_type: Folder type (0=regular, 1=system, 2=smart).
     """
 
     name: str
     identifier: str
     note_count: int
     path: str = ""
+    folder_type: int = 0
 
 
 # Apple Notes database location
@@ -696,19 +698,42 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
     # Get folder paths first
     folder_paths = get_folder_paths(conn)
 
-    query = """
-        SELECT
-            f.Z_PK as id,
-            f.ZTITLE2 as name,
-            f.ZIDENTIFIER as identifier,
-            COUNT(n.Z_PK) as note_count
-        FROM ZICCLOUDSYNCINGOBJECT f
-        LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
-            AND n.ZTITLE1 IS NOT NULL
-        WHERE f.ZTITLE2 IS NOT NULL
-        GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER
-        ORDER BY f.ZTITLE2
-    """
+    # Check if ZFOLDERTYPE column exists (may not in test fixtures)
+    cursor = conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")
+    columns = {row[1] for row in cursor.fetchall()}
+    has_folder_type = "ZFOLDERTYPE" in columns
+
+    if has_folder_type:
+        query = """
+            SELECT
+                f.Z_PK as id,
+                f.ZTITLE2 as name,
+                f.ZIDENTIFIER as identifier,
+                COALESCE(f.ZFOLDERTYPE, 0) as folder_type,
+                COUNT(n.Z_PK) as note_count
+            FROM ZICCLOUDSYNCINGOBJECT f
+            LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
+                AND n.ZTITLE1 IS NOT NULL
+            WHERE f.ZTITLE2 IS NOT NULL
+            GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER, f.ZFOLDERTYPE
+            ORDER BY f.ZTITLE2
+        """
+    else:
+        query = """
+            SELECT
+                f.Z_PK as id,
+                f.ZTITLE2 as name,
+                f.ZIDENTIFIER as identifier,
+                0 as folder_type,
+                COUNT(n.Z_PK) as note_count
+            FROM ZICCLOUDSYNCINGOBJECT f
+            LEFT JOIN ZICCLOUDSYNCINGOBJECT n ON n.ZFOLDER = f.Z_PK
+                AND n.ZTITLE1 IS NOT NULL
+            WHERE f.ZTITLE2 IS NOT NULL
+            GROUP BY f.Z_PK, f.ZTITLE2, f.ZIDENTIFIER
+            ORDER BY f.ZTITLE2
+        """
+
     cursor = conn.execute(query)
     folders = [
         FolderInfo(
@@ -716,6 +741,7 @@ def get_folders(conn: sqlite3.Connection) -> list[FolderInfo]:
             identifier=row["identifier"] or "",
             note_count=row["note_count"],
             path=folder_paths.get(row["id"], row["name"]),
+            folder_type=row["folder_type"],
         )
         for row in cursor
     ]

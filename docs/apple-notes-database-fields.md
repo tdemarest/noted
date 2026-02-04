@@ -311,7 +311,7 @@ The `ZPLACEMARKDATA` blob contains a serialized `CLPlacemark` in bplist format w
 | Column | Type | Description | Values |
 |--------|------|-------------|--------|
 | `ZTITLE2` | VARCHAR | Folder name | `"Work"`, `"Personal"` |
-| `ZFOLDERTYPE` | INTEGER | Folder type | 0=normal, 1=Recently Deleted |
+| `ZFOLDERTYPE` | INTEGER | Folder type | 0=regular, 1=system (Recently Deleted), 2=smart folder |
 | `ZPARENT` | INTEGER | Parent folder FK | For nested folders |
 | `ZNESTEDTITLEFORSORTING` | VARCHAR | Full path for sorting | For hierarchy |
 | `ZSMARTFOLDERQUERYJSON` | VARCHAR | Smart folder query | JSON query definition |
@@ -330,6 +330,56 @@ FROM ZICCLOUDSYNCINGOBJECT f
 LEFT JOIN ZICCLOUDSYNCINGOBJECT p ON f.ZPARENT = p.Z_PK
 WHERE f.ZTITLE2 IS NOT NULL
 ORDER BY f.ZNESTEDTITLEFORSORTING;
+```
+
+### Smart Folder Query Format
+
+Smart folders (ZFOLDERTYPE=2) use `ZSMARTFOLDERQUERYJSON` to define their filter criteria.
+The JSON structure supports various query types:
+
+**Tag-based smart folders:**
+```json
+{
+  "entity": "note",
+  "type": {
+    "and": [
+      {"tag": "TODO"},
+      {"deleted": false}
+    ]
+  }
+}
+```
+
+**Pinned notes smart folder:**
+```json
+{
+  "entity": "note",
+  "type": {
+    "and": [
+      {"deleted": false},
+      {"and": [{"pinned": true}]}
+    ]
+  }
+}
+```
+
+**Date-based smart folder (recent edits):**
+```json
+{
+  "entity": "note",
+  "type": {
+    "and": [
+      {"deleted": false},
+      {"and": [
+        {"modificationDateRelativeRange": {
+          "type": 6,
+          "customAmount": 1,
+          "customUnit": 2
+        }}
+      ]}
+    ]
+  }
+}
 ```
 
 ## Account Information

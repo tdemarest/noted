@@ -185,14 +185,27 @@ uv run noted list --tree --verbose -s "meeting"
 
 ### Tree View Icons
 
+**Folder Types:**
+
 | Icon | Meaning |
 |------|---------|
-| 📁 | Folder |
-| 🗑️ | Recently Deleted folder |
+| 📁 | Regular folder |
+| 🔎 | Smart folder (query-based virtual folder) |
+| ⚙️ | System folder (Recently Deleted) |
+
+**Note Indicators:**
+
+| Icon | Meaning |
+|------|---------|
 | 📄 | Note |
 | 🔒 | Locked (password-protected) |
 | ✅ | Checklist complete |
 | 🔲 | Checklist incomplete |
+
+**Attachment Types:**
+
+| Icon | Meaning |
+|------|---------|
 | 📷 | Image attachment |
 | 📄 | PDF attachment |
 | 📊 | Office document |
@@ -206,12 +219,15 @@ Default tree (folders only):
 
 ```text
 📁 Notes (1879)
+├── 🔎 Action Items (0)
 ├── 📁 Work (245)
 │   ├── 📁 Projects (52)
 │   │   └── 📁 2024 (18)
 │   └── 📁 Meetings (89)
 ├── 📁 Personal (312)
-└── 🗑️ Recently Deleted (4)
+├── ⚙️ Recently Deleted (4)
+├── 🔎 Template Notes (0)
+└── 🔎 Waiting For (0)
 ```
 
 With `--verbose` (includes notes):
