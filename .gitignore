@@ -85,3 +85,22 @@ input/
 
 # Claude settings
 .claude/
+
+# ----------------------------
+# Credentials and databases
+# ----------------------------
+.env.*
+!.env.template
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Default export folder
+notes_export/
