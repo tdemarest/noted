@@ -11,7 +11,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from noted.models import Attachment, DatabaseStats, Note, NoteSummary
+from noted.models import Attachment, DatabaseStats, Note
 from noted.tables import parse_table_data
 
 
@@ -284,38 +284,6 @@ def count_notes(conn: sqlite3.Connection) -> int:
     return cursor.fetchone()[0]
 
 
-def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummary:
-    """Get aggregate statistics about notes.
-
-    Args:
-        conn: Database connection.
-        by_folder: Whether to include per-folder counts.
-
-    Returns:
-        NoteSummary with total count and optional folder breakdown.
-    """
-    total = count_notes(conn)
-    folder_counts: dict[str, int] = {}
-
-    if by_folder:
-        query = f"""
-            SELECT
-                COALESCE(f.ZTITLE2, '(No Folder)') as folder,
-                COUNT(*) as count
-            FROM ZICCLOUDSYNCINGOBJECT n
-            LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
-            WHERE n.ZTITLE1 IS NOT NULL
-              AND NOT {deleted_note_sql(conn)}
-            GROUP BY f.ZTITLE2
-            ORDER BY count DESC
-        """
-        cursor = conn.execute(query)
-        for row in cursor:
-            folder_counts[row["folder"]] = row["count"]
-
-    return NoteSummary(total_count=total, folder_counts=folder_counts)
-
-
 def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> DatabaseStats:
     """Get comprehensive statistics about the notes database.
 
@@ -464,29 +432,6 @@ def get_note_content(conn: sqlite3.Connection, note_id: int) -> bytes | None:
         WHERE n.Z_PK = ?
     """
     cursor = conn.execute(query, (note_id,))
-    row = cursor.fetchone()
-    if row is None:
-        return None
-    return row["ZDATA"]
-
-
-def get_note_content_by_identifier(conn: sqlite3.Connection, identifier: str) -> bytes | None:
-    """Fetch raw ZDATA bytes for a note by UUID identifier.
-
-    Args:
-        conn: Database connection.
-        identifier: The ZIDENTIFIER (UUID) of the note.
-
-    Returns:
-        Raw gzip-compressed protobuf bytes, or None if not found.
-    """
-    query = """
-        SELECT nd.ZDATA
-        FROM ZICCLOUDSYNCINGOBJECT n
-        JOIN ZICNOTEDATA nd ON nd.ZNOTE = n.Z_PK
-        WHERE n.ZIDENTIFIER = ?
-    """
-    cursor = conn.execute(query, (identifier,))
     row = cursor.fetchone()
     if row is None:
         return None

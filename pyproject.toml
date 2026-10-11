@@ -36,6 +36,10 @@ pythonpath = ["src"]
 [tool.pyrefly]
 project_includes = ["src"]
 
+[tool.deptry]
+# The package imports itself as `noted` under the src/ layout.
+known_first_party = ["noted"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
