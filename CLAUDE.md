@@ -105,6 +105,7 @@ noted/
 └── docs/
     ├── apple-notes-attachment-structure.md  # Attachment storage documentation
     ├── apple-notes-crdt-table-structure.md  # Table CRDT documentation
+    ├── apple-notes-storage-reference.md     # Full storage reference (REA-verified schema, enums, paths, reader recipe)
     └── plans/              # Design and implementation plans
 ```
 
