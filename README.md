@@ -289,7 +289,7 @@ Export notes in different formats:
 ```bash
 # Markdown
 uv run noted view 42 --markdown
-uv run noted view 42 --markdown -o ./my_note.md
+uv run noted view 42 --markdown --export   # writes a file; name comes from the note title
 
 # JSON
 uv run noted view 42 --json
@@ -462,8 +462,8 @@ Contributions are welcome! If you have a suggestion that would make this better:
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Run tests: `uv run pytest`
-5. Run linting: `uv run ruff check .`
+4. Run tests: `uv run pytest -n auto -x`
+5. Run linting: `uv run ruff check .` and `uv run ruff format --check .`
 6. Commit your Changes (`git commit -m 'feat: add amazing feature'`)
 7. Push to the Branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
@@ -475,13 +475,20 @@ Contributions are welcome! If you have a suggestion that would make this better:
 uv sync
 
 # Run tests
-uv run pytest
+uv run pytest -n auto -x
 
-# Run linting
+# Run linting and format check
 uv run ruff check .
+uv run ruff format --check .
 
-# Run type checking
-uv run pyrefly check src/
+# Run type checking (covers src and tests)
+uv run pyrefly check
+
+# Check for unused or missing dependencies
+uvx deptry .
+
+# Full commit gate (every check above plus the crypto check)
+bash .claude/hooks/precommit-gate.sh --local
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

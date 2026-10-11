@@ -30,6 +30,7 @@ uv run noted --help          # CLI entry point
 uv run ruff format . && uv run ruff check .
 uv run pyrefly check
 uv run pytest -n auto -x
+uvx deptry .                # unused/missing dependencies ([tool.deptry] in pyproject.toml)
 bash .claude/hooks/precommit-gate.sh --local   # full commit gate
 python3 .claude/hooks/pqc-check.py --all       # crypto check alone
 ```
