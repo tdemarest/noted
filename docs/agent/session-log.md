@@ -15,6 +15,11 @@ history), and never let it grow past ~15 entries.
 
 <!-- entries below -->
 
+## 2026-10-10 - export links, anchors and --toc
+- Decided: new `outline.py` (keeps display.py from growing); renderers record headings in a shared `Outline` as they emit them, so anchors and TOC never drift. JSON, text and terminal reuse the HTML walk (`collect_headings`). GitHub-style slugs so Markdown `#anchor` links work without emitted ids; note title reserved first. Markdown TOC title is bold text, not a heading, so it does not shift anchors. PDF page numbers via `target-counter` under `@media print` (browsers ignore it).
+- Decided: autolink only http(s) and mailto; never in code blocks or headings. Run links with unsafe schemes are now plain text in HTML and Markdown (was a live `javascript:` href).
+- Open: index.html for `export --all` (todo Later).
+
 ## 2026-10-10 - view list item styling fix
 - Decided: trim the styled rich Text in place (`Text.rstrip()`) instead of rebuilding from `str()`, which dropped every span; this also restored the dim strike on checked checklist items.
 - Open: none.

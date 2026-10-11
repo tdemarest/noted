@@ -3,6 +3,7 @@
 import html
 import json
 import re
+from dataclasses import asdict
 
 from rich import box
 from rich.console import Console
@@ -26,8 +27,16 @@ from noted.models import (
     TextAlignment,
     TextStyle,
 )
+from noted.outline import Heading, Outline, html_toc, markdown_toc, split_urls, text_toc
 
 console = Console()
+
+# Keyed by the optional paragraph type that the renderers read off each run
+_HEADING_LEVELS: dict[int | None, int] = {
+    ParagraphType.TITLE: 1,
+    ParagraphType.HEADING: 2,
+    ParagraphType.SUBHEADING: 3,
+}
 
 DIVIDER_UTI = "com.apple.notes.inlinetextattachment.dividerline"
 # Inline attachments rendered as their alt text (tag name, linked note title)
@@ -200,9 +209,48 @@ def _markdown_link(label: str, url: str) -> str:
 
 def _html_link(label: str, url: str) -> str:
     """Build an HTML link, or plain escaped text if the URL scheme is unsafe."""
-    if not url.lower().startswith(SAFE_LINK_SCHEMES):
+    if not _is_safe_link(url):
         return html.escape(label)
     return f'<a href="{html.escape(url, quote=True)}">{html.escape(label)}</a>'
+
+
+def _is_safe_link(url: str) -> bool:
+    """Check that a URL uses a scheme that is safe to emit as a live link.
+
+    Args:
+        url: Link target from the note.
+
+    Returns:
+        True for http(s), mailto and applenotes URLs.
+    """
+    return url.lower().startswith(SAFE_LINK_SCHEMES)
+
+
+def _autolink_html(text: str) -> str:
+    """Escape text for HTML, turning bare URLs into links.
+
+    Args:
+        text: Raw note text.
+
+    Returns:
+        Escaped HTML with each bare URL wrapped in an anchor.
+    """
+    return "".join(
+        _html_link(piece, piece) if is_url else html.escape(piece)
+        for piece, is_url in split_urls(text)
+    )
+
+
+def _autolink_markdown(text: str) -> str:
+    """Wrap bare URLs in Markdown autolink brackets.
+
+    Args:
+        text: Raw note text.
+
+    Returns:
+        Text with each bare URL written as ``<url>``.
+    """
+    return "".join(f"<{piece}>" if is_url else piece for piece, is_url in split_urls(text))
 
 
 def _attachment_type_name(uti: str) -> str:
@@ -833,12 +881,13 @@ def display_debug_note_info(
     console.print()
 
 
-def display_note_view(note: Note, content: NoteContent) -> None:
+def display_note_view(note: Note, content: NoteContent, toc: bool = False) -> None:
     """Display a note's full content.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
+        toc: Print an indented list of headings before the body.
     """
     # Format metadata line
     folder_str = note.folder or "(No Folder)"
@@ -854,6 +903,11 @@ def display_note_view(note: Note, content: NoteContent) -> None:
     )
     console.print(panel)
     console.print()
+
+    headings = collect_headings(note, content) if toc else []
+    if headings:
+        console.print(Text(text_toc(headings), style="cyan"))
+        console.print()
 
     # Build attachment lookup for inline rendering
     table_lookup: dict[str, Table] = {}
@@ -1184,12 +1238,13 @@ def table_to_markdown(table: Table) -> str:
     return "\n".join(lines)
 
 
-def get_note_markdown(note: Note, content: NoteContent) -> str:
+def get_note_markdown(note: Note, content: NoteContent, toc: bool = False) -> str:
     """Get a note as raw markdown text.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
+        toc: Insert a linked table of contents after the title.
 
     Returns:
         Markdown-formatted string.
@@ -1201,10 +1256,16 @@ def get_note_markdown(note: Note, content: NoteContent) -> str:
             if att.table is not None:
                 table_lookup[att.identifier] = att.table
 
-    # Convert to markdown (skip_title=True since we add our own)
-    md_text = note_to_markdown(content, table_lookup, skip_first_title=True)
+    # The title heading counts toward anchor uniqueness, as it does on GitHub
+    outline = Outline()
+    outline.reserve(note.title)
 
-    # Add title as H1
+    # Convert to markdown (skip_title=True since we add our own)
+    md_text = note_to_markdown(content, table_lookup, skip_first_title=True, outline=outline)
+
+    toc_block = markdown_toc(outline.headings) if toc else ""
+    if toc_block:
+        return f"# {note.title}\n\n{toc_block}\n\n{md_text}"
     return f"# {note.title}\n\n{md_text}"
 
 
@@ -1212,6 +1273,7 @@ def note_to_markdown(
     content: NoteContent,
     table_lookup: dict[str, Table],
     skip_first_title: bool = False,
+    outline: Outline | None = None,
 ) -> str:
     """Convert note content to markdown string.
 
@@ -1220,6 +1282,7 @@ def note_to_markdown(
         table_lookup: Mapping of table identifier to parsed Table.
         skip_first_title: If True, skip the first TITLE paragraph (to avoid
             duplicating the note title we add separately).
+        outline: Collects each emitted heading, for a table of contents.
 
     Returns:
         Markdown-formatted string.
@@ -1407,6 +1470,8 @@ def note_to_markdown(
                 skipped_first_title = True
                 continue
 
+            if outline is not None:
+                outline.add(_HEADING_LEVELS[para_type], heading_text.strip())
             if para_type == ParagraphType.TITLE:
                 lines.append(f"# {heading_text}")
             elif para_type == ParagraphType.HEADING:
@@ -1503,7 +1568,7 @@ def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) 
     Returns:
         Markdown-formatted text.
     """
-    result = text
+    result = text if link else _autolink_markdown(text)
 
     # Apply character styles
     if style:
@@ -1520,8 +1585,8 @@ def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) 
 
         # Underline doesn't have standard markdown, skip it
 
-    # Links
-    if link:
+    # Links (unsafe schemes such as javascript: stay plain text)
+    if link and _is_safe_link(link):
         link_text = text.strip()
         if link_text:
             result = f"[{link_text}]({link})"
@@ -1529,13 +1594,16 @@ def _apply_markdown_style(text: str, style: TextStyle | None, link: str | None) 
     return result
 
 
-def get_note_json(note: Note, content: NoteContent, include_styling: bool = False) -> str:
+def get_note_json(
+    note: Note, content: NoteContent, include_styling: bool = False, toc: bool = False
+) -> str:
     """Get a note as JSON string.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
         include_styling: If True, include detailed styling metadata for each run.
+        toc: Include a ``toc`` list of headings with their level, text and anchor.
 
     Returns:
         JSON-formatted string.
@@ -1554,6 +1622,8 @@ def get_note_json(note: Note, content: NoteContent, include_styling: bool = Fals
         "created": note.created.isoformat() if note.created else None,
         "modified": note.modified.isoformat() if note.modified else None,
     }
+    if toc:
+        data["toc"] = [asdict(h) for h in collect_headings(note, content)]
 
     if include_styling and content.formatted_runs:
         # Include detailed run information
@@ -1616,12 +1686,15 @@ def get_note_json(note: Note, content: NoteContent, include_styling: bool = Fals
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-def get_note_html(note: Note, content: NoteContent) -> str:
+def get_note_html(note: Note, content: NoteContent, toc: bool = False) -> str:
     """Get a note as a standalone HTML5 document.
+
+    Headings carry anchor ids, which also become PDF bookmarks.
 
     Args:
         note: Note metadata (title, folder, dates).
         content: Parsed note content.
+        toc: Insert a linked table of contents above the note body.
 
     Returns:
         HTML5 document string.
@@ -1634,7 +1707,11 @@ def get_note_html(note: Note, content: NoteContent) -> str:
                 table_lookup[att.identifier] = att.table
 
     # Convert content to HTML
-    body_html = _note_to_html(content, table_lookup)
+    outline = Outline()
+    title_anchor = outline.reserve(note.title)
+    body_html = _note_to_html(content, table_lookup, outline)
+    if toc and outline.headings:
+        body_html = f"{html_toc(outline.headings)}\n{body_html}"
 
     # Format metadata
     folder_str = note.folder or "No Folder"
@@ -1826,6 +1903,36 @@ def get_note_html(note: Note, content: NoteContent) -> str:
             border-radius: 2px;
         }}
 
+        .toc {{
+            margin: 0 0 1.5rem 0;
+            padding: 1rem 1.5rem;
+            background: var(--noted-purple-light);
+            border-radius: 4px;
+        }}
+
+        .toc-title {{
+            margin: 0 0 0.5rem 0;
+            font-weight: 500;
+            color: var(--noted-purple);
+        }}
+
+        .toc ul {{
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }}
+
+        .toc-depth-1 {{ padding-left: 1.25rem; }}
+        .toc-depth-2 {{ padding-left: 2.5rem; }}
+
+        @media print {{
+            /* Page numbers in the PDF; browsers ignore target-counter */
+            .toc a::after {{
+                content: leader('.') target-counter(attr(href), page);
+                color: var(--noted-charcoal);
+            }}
+        }}
+
         footer {{
             margin-top: 2rem;
             padding-top: 1rem;
@@ -1838,7 +1945,7 @@ def get_note_html(note: Note, content: NoteContent) -> str:
 </head>
 <body>
     <header>
-        <h1>{html.escape(note.title)}</h1>
+        <h1 id="{title_anchor}">{html.escape(note.title)}</h1>
         <div class="meta">
             <span>Folder: {html.escape(folder_str)}</span> &nbsp;|&nbsp;
             <span>Modified: {modified_str}</span>
@@ -1980,12 +2087,14 @@ def link_attachments_markdown(
 def _note_to_html(
     content: NoteContent,
     table_lookup: dict[str, Table],
+    outline: Outline,
 ) -> str:
     """Convert note content to HTML body content.
 
     Args:
         content: Parsed note content with formatted runs.
         table_lookup: Mapping of table identifier to parsed Table.
+        outline: Assigns each heading its anchor id and collects it for a TOC.
 
     Returns:
         HTML string for the note body.
@@ -2101,7 +2210,7 @@ def _note_to_html(
                 else:
                     break
             i = j
-            escaped_quote = html.escape(quote_text.strip())
+            escaped_quote = _autolink_html(quote_text.strip())
             lines.append(f"            <blockquote><p>{escaped_quote}</p></blockquote>")
             continue
 
@@ -2192,12 +2301,11 @@ def _note_to_html(
                 skipped_first_title = True
                 continue
 
-            if para_type == ParagraphType.TITLE:
-                lines.append(f"            <h1>{html.escape(heading_text)}</h1>")
-            elif para_type == ParagraphType.HEADING:
-                lines.append(f"            <h2>{html.escape(heading_text)}</h2>")
-            else:
-                lines.append(f"            <h3>{html.escape(heading_text)}</h3>")
+            level = _HEADING_LEVELS[para_type]
+            anchor = outline.add(level, heading_text)
+            lines.append(
+                f'            <h{level} id="{anchor}">{html.escape(heading_text)}</h{level}>'
+            )
             continue
 
         # Regular text
@@ -2236,8 +2344,8 @@ def _apply_html_style(text: str, style: TextStyle | None, link: str | None) -> s
     Returns:
         HTML-formatted text.
     """
-    # Escape HTML entities first
-    result = html.escape(text)
+    # Escape HTML entities first; bare URLs in unlinked text become links
+    result = html.escape(text) if link else _autolink_html(text)
 
     # Apply character styles
     if style:
@@ -2252,11 +2360,46 @@ def _apply_html_style(text: str, style: TextStyle | None, link: str | None) -> s
         if style.bold:
             result = f"<strong>{result}</strong>"
 
-    # Links
-    if link:
-        result = f'<a href="{html.escape(link)}">{result}</a>'
+    # Links (unsafe schemes such as javascript: stay plain text)
+    if link and _is_safe_link(link):
+        result = f'<a href="{html.escape(link, quote=True)}">{result}</a>'
 
     return result
+
+
+def collect_headings(note: Note, content: NoteContent) -> list[Heading]:
+    """List a note's headings with the anchors the HTML export gives them.
+
+    Runs the HTML renderer and discards its output, so formats without anchors of
+    their own (JSON, plain text, terminal) list exactly the same headings.
+
+    Args:
+        note: Note metadata; the title is reserved as the first anchor.
+        content: Parsed note content.
+
+    Returns:
+        Headings in document order, excluding the note title.
+    """
+    outline = Outline()
+    outline.reserve(note.title)
+    _note_to_html(content, {}, outline)
+    return outline.headings
+
+
+def get_note_text(note: Note, content: NoteContent, toc: bool = False) -> str:
+    """Get a note as plain text.
+
+    Args:
+        note: Note metadata, used for the table of contents.
+        content: Parsed note content.
+        toc: Prefix the text with an indented list of headings.
+
+    Returns:
+        The note text.
+    """
+    text = content.text or ""
+    toc_block = text_toc(collect_headings(note, content)) if toc else ""
+    return f"{toc_block}\n\n{text}" if toc_block else text
 
 
 def _table_to_html(table: Table) -> str:

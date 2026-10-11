@@ -346,6 +346,11 @@ def view(
         "-o",
         help="Export to file (filename auto-generated from note title, extension based on format).",
     ),
+    toc: bool = typer.Option(
+        False,
+        "--toc",
+        help="Add a table of contents linking to the note's headings.",
+    ),
 ) -> None:
     """View the full content of a note.
 
@@ -466,27 +471,27 @@ def view(
 
             if pdf:
                 # Generate HTML with linked attachments, then convert to PDF
-                html_content = display.get_note_html(note, content)
+                html_content = display.get_note_html(note, content, toc=toc)
                 if exported_atts:
                     html_content = display.link_attachments_html(
                         html_content, exported_atts, attachments_dir
                     )
                 output_bytes = pdf_module.render_pdf(html_content)
             elif json_output or json_styled:
-                output = display.get_note_json(note, content, include_styling=json_styled)
+                output = display.get_note_json(note, content, include_styling=json_styled, toc=toc)
             elif html:
-                output = display.get_note_html(note, content)
+                output = display.get_note_html(note, content, toc=toc)
                 if exported_atts:
                     output = display.link_attachments_html(output, exported_atts, attachments_dir)
             elif markdown:
-                output = display.get_note_markdown(note, content)
+                output = display.get_note_markdown(note, content, toc=toc)
                 if exported_atts:
                     output = display.link_attachments_markdown(
                         output, exported_atts, attachments_dir
                     )
             else:
                 # Plain text - no linking
-                output = content.text or ""
+                output = display.get_note_text(note, content, toc=toc)
 
             # Write to file
             final_path = Path.cwd() / f"{base_name}{ext}"
@@ -498,13 +503,13 @@ def view(
         else:
             # Terminal display (no export)
             if json_output or json_styled:
-                print(display.get_note_json(note, content, include_styling=json_styled))
+                print(display.get_note_json(note, content, include_styling=json_styled, toc=toc))
             elif html:
-                print(display.get_note_html(note, content))
+                print(display.get_note_html(note, content, toc=toc))
             elif markdown:
-                print(display.get_note_markdown(note, content))
+                print(display.get_note_markdown(note, content, toc=toc))
             else:
-                display.display_note_view(note, content)
+                display.display_note_view(note, content, toc=toc)
 
         conn.close()
 
@@ -582,6 +587,11 @@ def export(
         "--html",
         help="Export as standalone HTML5 document (single note only).",
     ),
+    toc: bool = typer.Option(
+        False,
+        "--toc",
+        help="Add a table of contents linking to each note's headings.",
+    ),
 ) -> None:
     """Export notes to markdown with attachments.
 
@@ -626,6 +636,7 @@ def export(
                 create_archive=zip_archive,
                 folder_filter=folder_filter,
                 verbose=verbose,
+                toc=toc,
             )
 
             result = export_module.export_all_notes(conn, options)
@@ -692,15 +703,15 @@ def export(
             # Determine output format and generate content
             if fmt_json or fmt_json_styled:
                 output_content = display.get_note_json(
-                    note, content, include_styling=fmt_json_styled
+                    note, content, include_styling=fmt_json_styled, toc=toc
                 )
                 ext = ".json"
             elif fmt_html:
-                output_content = display.get_note_html(note, content)
+                output_content = display.get_note_html(note, content, toc=toc)
                 ext = ".html"
             else:
                 # Markdown: explicit --markdown or no format flag given
-                output_content = display.get_note_markdown(note, content)
+                output_content = display.get_note_markdown(note, content, toc=toc)
                 ext = ".md"
 
             # Write to file

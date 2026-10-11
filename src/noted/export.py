@@ -24,6 +24,7 @@ class ExportOptions:
         create_archive: Also create .7z archive.
         folder_filter: Only export notes from this folder.
         verbose: Show detailed progress for each note.
+        toc: Add a table of contents to each exported note.
     """
 
     output_dir: Path
@@ -31,6 +32,7 @@ class ExportOptions:
     create_archive: bool = False
     folder_filter: str | None = None
     verbose: bool = False
+    toc: bool = False
 
 
 @dataclass
@@ -220,6 +222,7 @@ def export_single_note(
     note: Note,
     output_dir: Path,
     used_folder_names: set[str] | None = None,
+    toc: bool = False,
 ) -> NoteExportResult:
     """Export a single note to the output directory.
 
@@ -231,6 +234,7 @@ def export_single_note(
         note: Note to export.
         output_dir: Base output directory.
         used_folder_names: Set of already-used folder names for deduplication.
+        toc: Add a table of contents to the markdown.
 
     Returns:
         NoteExportResult with export status and path.
@@ -290,7 +294,7 @@ def export_single_note(
         db.load_attachment_content(conn, content.attachments)
 
         # Generate markdown
-        markdown_content = display.get_note_markdown(note, content)
+        markdown_content = display.get_note_markdown(note, content, toc=toc)
 
         # Create note folder and write file
         note_path.mkdir(parents=True, exist_ok=True)
@@ -406,7 +410,11 @@ def export_all_notes(
                 used_names_by_folder[folder_key] = set()
 
             result = export_single_note(
-                conn, note, options.output_dir, used_names_by_folder[folder_key]
+                conn,
+                note,
+                options.output_dir,
+                used_names_by_folder[folder_key],
+                toc=options.toc,
             )
             note_results.append(result)
 

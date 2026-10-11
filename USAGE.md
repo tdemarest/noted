@@ -13,6 +13,7 @@ A comprehensive guide to using the `noted` CLI tool for working with Apple Notes
   - [Deep Search (FTS5)](#deep-search-fts5)
   - [FTS5 Query Syntax](#fts5-query-syntax)
 - [Viewing Notes](#viewing-notes)
+  - [Links, Sections and Table of Contents](#links-sections-and-table-of-contents)
 - [Exporting Notes](#exporting-notes)
   - [Single Note Export](#single-note-export)
   - [Bulk Export](#bulk-export)
@@ -82,8 +83,8 @@ Now you can use `noted` directly with tab completion:
 
 ```bash
 noted list --<TAB>        # Shows: --folder, --limit, --search, --deep, --tree, --verbose
-noted view --<TAB>        # Shows: --markdown, --json, --html, --pdf, --export
-noted export --<TAB>      # Shows: --all, --zip, --folder, --markdown, --json, --html
+noted view --<TAB>        # Shows: --markdown, --json, --html, --pdf, --export, --toc
+noted export --<TAB>      # Shows: --all, --zip, --folder, --markdown, --json, --html, --toc
 ```
 
 ---
@@ -346,6 +347,29 @@ When a note has attachments:
   - PDF: Same as HTML (images rendered inline, PDFs as clickable links)
 
 **Inline elements** like hashtags (`#template`) and mentions are displayed as plain text rather than attachment placeholders.
+
+### Links, Sections and Table of Contents
+
+- **Links**: links stored in the note are kept. Bare `http(s)://` and `mailto:` URLs typed as plain text also become links (Markdown `<url>`, HTML `<a>`, clickable in PDF). Only `http(s)`, `mailto` and `applenotes` links are kept live; anything else (such as `javascript:`) is written as plain text.
+- **Sections**: headings get GitHub-style anchors (`## Getting Started` -> `#getting-started`), so other documents can link to a section. In HTML they are `id` attributes; in PDF they also become the bookmark outline.
+- **`--toc`**: adds a linked table of contents of the note's headings. It works with `view` and `export` (including `export --all`) in every format:
+
+```bash
+uv run noted view 42 --toc                    # "Contents" list above the note
+uv run noted view 42 --export --pdf --toc     # Clickable TOC with page numbers
+uv run noted export 42 --html --toc
+uv run noted export --all --toc
+```
+
+| Format | Table of contents |
+|---|---|
+| Terminal, plain text | Indented "Contents" list of headings |
+| Markdown | Bulleted links to `#anchor`s under the title |
+| HTML | Linked "Contents" box above the body |
+| PDF | As HTML, plus page numbers |
+| JSON | `toc` array of `{level, text, anchor}` |
+
+Notes without headings get no table of contents.
 
 ### Debug Mode
 
