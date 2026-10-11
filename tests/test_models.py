@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from noted.models import Attachment, Note, NoteContent, NoteSummary, Table
+from noted.models import Attachment, Note, NoteContent, Table
 
 
 def test_note_creation() -> None:
@@ -34,24 +34,6 @@ def test_note_with_none_folder() -> None:
         modified=datetime(2025, 1, 1),
     )
     assert note.folder is None
-
-
-def test_note_summary_creation() -> None:
-    """Test NoteSummary dataclass creation."""
-    summary = NoteSummary(
-        total_count=42,
-        folder_counts={"Personal": 20, "Work": 22},
-    )
-    assert summary.total_count == 42
-    assert summary.folder_counts["Personal"] == 20
-    assert summary.folder_counts["Work"] == 22
-
-
-def test_note_summary_empty_folders() -> None:
-    """Test NoteSummary with no folders."""
-    summary = NoteSummary(total_count=0, folder_counts={})
-    assert summary.total_count == 0
-    assert summary.folder_counts == {}
 
 
 def test_note_content_creation() -> None:

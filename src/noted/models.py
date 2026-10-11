@@ -32,19 +32,6 @@ class Note:
 
 
 @dataclass
-class NoteSummary:
-    """Aggregate statistics about the notes database.
-
-    Attributes:
-        total_count: Total number of notes.
-        folder_counts: Mapping of folder name to note count.
-    """
-
-    total_count: int
-    folder_counts: dict[str, int]
-
-
-@dataclass
 class DatabaseStats:
     """Comprehensive statistics about the notes database.
 

@@ -5,14 +5,13 @@ from unittest.mock import patch
 
 from noted.display import (
     _format_file_size,
-    display_count,
     display_note_view,
     display_notes_table,
     display_warning,
     table_to_markdown,
     table_to_rich,
 )
-from noted.models import Note, NoteContent, NoteSummary, Table
+from noted.models import Note, NoteContent, Table
 
 
 def test_display_notes_table_renders() -> None:
@@ -35,23 +34,6 @@ def test_display_notes_table_empty() -> None:
     """Test displaying empty notes list."""
     # Should not raise
     display_notes_table([])
-
-
-def test_display_count_total() -> None:
-    """Test displaying total count."""
-    summary = NoteSummary(total_count=42, folder_counts={})
-    # Should not raise
-    display_count(summary)
-
-
-def test_display_count_by_folder() -> None:
-    """Test displaying counts by folder."""
-    summary = NoteSummary(
-        total_count=42,
-        folder_counts={"Personal": 20, "Work": 22},
-    )
-    # Should not raise
-    display_count(summary)
 
 
 def test_display_note_view() -> None:

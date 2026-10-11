@@ -19,7 +19,6 @@ from noted.models import (
     FormattedRun,
     Note,
     NoteContent,
-    NoteSummary,
     ParagraphType,
     SearchResult,
     Table,
@@ -442,26 +441,6 @@ def display_search_results(results: list[SearchResult], query: str) -> None:
 
     console.print(table)
     console.print(f"\n[dim]Found: {len(results)} notes matching '{query}'[/dim]")
-
-
-def display_count(summary: NoteSummary) -> None:
-    """Display note counts.
-
-    Args:
-        summary: NoteSummary with counts.
-    """
-    console.print(f"[bold]Total notes:[/bold] {summary.total_count}")
-
-    if summary.folder_counts:
-        console.print("\n[bold]By folder:[/bold]")
-        table = RichTable(show_header=True, header_style="bold")
-        table.add_column("Folder")
-        table.add_column("Count", justify="right")
-
-        for folder, count in summary.folder_counts.items():
-            table.add_row(folder, str(count))
-
-        console.print(table)
 
 
 # Attachment type groupings for cleaner display
