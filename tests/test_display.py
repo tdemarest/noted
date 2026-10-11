@@ -1,8 +1,12 @@
 """Tests for noted.display."""
 
+import io
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+from rich.console import Console
+
+from noted import display
 from noted.display import (
     _format_file_size,
     display_note_view,
@@ -11,7 +15,15 @@ from noted.display import (
     table_to_markdown,
     table_to_rich,
 )
-from noted.models import Note, NoteContent, Table
+from noted.models import (
+    FormattedRun,
+    Note,
+    NoteContent,
+    ParagraphStyle,
+    ParagraphType,
+    Table,
+    TextStyle,
+)
 
 
 def test_display_notes_table_renders() -> None:
@@ -66,6 +78,38 @@ def test_display_note_view_no_folder() -> None:
 
     # Should not raise
     display_note_view(note, content)
+
+
+def test_display_note_view_list_items_keep_styling() -> None:
+    """Test list items keep run styles and checked items keep their strike style."""
+    bullet = ParagraphStyle(paragraph_type=ParagraphType.BULLET_LIST)
+    checked = ParagraphStyle(paragraph_type=ParagraphType.CHECKLIST, is_checked=True)
+    runs = [
+        FormattedRun(text="plain ", length=6, paragraph_style=bullet),
+        FormattedRun(
+            text="bold", length=4, paragraph_style=bullet, text_style=TextStyle(bold=True)
+        ),
+        FormattedRun(text="\n", length=1, paragraph_style=bullet),
+        FormattedRun(text="done\n", length=5, paragraph_style=checked),
+    ]
+    note = Note(
+        id=1,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="T",
+        folder=None,
+        created=None,
+        modified=None,
+    )
+    rec = Console(
+        record=True, width=80, file=io.StringIO(), force_terminal=True, color_system="standard"
+    )
+
+    with patch.object(display, "console", rec):
+        display_note_view(note, NoteContent(text="", formatted_runs=runs))
+
+    out = rec.export_text(styles=True)
+    assert "\x1b[1mbold\x1b[0m" in out
+    assert "\x1b[2;9mdone\x1b[0m" in out
 
 
 def test_table_to_rich() -> None:

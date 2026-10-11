@@ -1028,14 +1028,8 @@ def _render_formatted_content(
                     item_text.stylize("dim strike")
                 last_list_type = para_type
 
-            # Print item text (remove trailing newline, we'll add it)
-            item_str = str(item_text).rstrip("\n")
-            item_text = Text(item_str)
-            for r in item_runs:
-                char_style = _get_char_style(r.text_style, r.link)
-                if char_style:
-                    # Re-apply styling after stripping
-                    pass
+            # Trim in place so the run styles survive; console.print adds the newline.
+            item_text.rstrip()
             console.print(item_text)
             continue
 

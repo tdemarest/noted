@@ -15,6 +15,10 @@ history), and never let it grow past ~15 entries.
 
 <!-- entries below -->
 
+## 2026-10-10 - view list item styling fix
+- Decided: trim the styled rich Text in place (`Text.rstrip()`) instead of rebuilding from `str()`, which dropped every span; this also restored the dim strike on checked checklist items.
+- Open: none.
+
 ## 2026-10-10 - project refresh (project-refresh 1.14.0)
 - Decided: betterproto -> betterproto2; adopted project-init tooling and ruff ruleset (line-length 100); fail fast on a missing Notes DB; bundle Roboto for offline PDF; held Python 3.15 (no cp315 wheels for py7zr deps, brotli). Full record: docs/maintenance/2026-10-10-refresh.md.
 - Tried and dropped: preloading Homebrew dylibs by absolute path for weasyprint (dyld ignores loaded images for bare names); setting DYLD_FALLBACK_LIBRARY_PATH during the import works.
