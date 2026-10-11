@@ -196,6 +196,8 @@ class FormattedRun:
         text_style: Character-level styling (bold, italic, etc.).
         paragraph_style: Paragraph-level formatting.
         link: URL if this run is a hyperlink.
+        attachment_identifier: ZIDENTIFIER of the attachment this run's
+            U+FFFC stands for, or None if the run is not an attachment.
     """
 
     text: str
@@ -203,6 +205,7 @@ class FormattedRun:
     text_style: TextStyle | None = None
     paragraph_style: ParagraphStyle | None = None
     link: str | None = None
+    attachment_identifier: str | None = None
 
 
 @dataclass

@@ -874,7 +874,7 @@ def _render_formatted_content(
     """
     # Object replacement character used by Apple Notes for attachments
     object_replacement_char = "\ufffc"
-    attachment_index = 0
+    attachments_by_id = {att.identifier: att for att in attachments_list}
 
     # Track numbered list counter
     numbered_list_count = 0
@@ -892,9 +892,8 @@ def _render_formatted_content(
 
         # Handle attachment placeholders (U+FFFC) - tables and other attachments
         if object_replacement_char in text:
-            if attachment_index < len(attachments_list):
-                att = attachments_list[attachment_index]
-                attachment_index += 1
+            att = attachments_by_id.get(run.attachment_identifier or "")
+            if att is not None:
                 if att.identifier in table_lookup:
                     # Render table inline
                     rich_table = table_to_rich(table_lookup[att.identifier])
@@ -1236,9 +1235,8 @@ def note_to_markdown(
     # Object replacement character used by Apple Notes for attachments
     object_replacement_char = "\ufffc"
 
-    # Build ordered list of all attachments for matching U+FFFC occurrences
-    all_attachments = content.attachments or []
-    attachment_index = 0
+    # Attachments keyed by identifier, matched to each U+FFFC run's identifier
+    attachments_by_id = {att.identifier: att for att in content.attachments or []}
 
     lines: list[str] = []
     current_line = ""
@@ -1259,9 +1257,8 @@ def note_to_markdown(
                 lines.append(current_line)
                 current_line = ""
             # Look up attachment by order
-            if attachment_index < len(all_attachments):
-                att = all_attachments[attachment_index]
-                attachment_index += 1
+            att = attachments_by_id.get(run.attachment_identifier or "")
+            if att is not None:
                 if att.type_uti == "com.apple.notes.table":
                     if att.identifier in table_lookup:
                         lines.append(table_to_markdown(table_lookup[att.identifier]))
@@ -2054,9 +2051,8 @@ def _note_to_html(
     # Object replacement character
     object_replacement_char = "\ufffc"
 
-    # Build ordered list of all attachments for matching U+FFFC occurrences
-    all_attachments = content.attachments or []
-    attachment_index = 0
+    # Attachments keyed by identifier, matched to each U+FFFC run's identifier
+    attachments_by_id = {att.identifier: att for att in content.attachments or []}
 
     lines: list[str] = []
     current_paragraph: list[str] = []
@@ -2103,9 +2099,8 @@ def _note_to_html(
         if object_replacement_char in text:
             flush_paragraph()
             flush_list()
-            if attachment_index < len(all_attachments):
-                att = all_attachments[attachment_index]
-                attachment_index += 1
+            att = attachments_by_id.get(run.attachment_identifier or "")
+            if att is not None:
                 if att.type_uti == "com.apple.notes.table":
                     if att.identifier in table_lookup:
                         lines.append(_table_to_html(table_lookup[att.identifier]))

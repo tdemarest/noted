@@ -5,6 +5,7 @@ import zlib
 
 import betterproto
 
+from noted.display import note_to_markdown
 from noted.protobuf import NoteStoreProto, is_note_locked, parse_note_data
 
 
@@ -224,3 +225,20 @@ def test_zlib_body_is_readable() -> None:
 def test_keyed_archive_body_is_locked() -> None:
     """A locked note's body (NSKeyedArchiver plist) is reported as locked."""
     assert is_note_locked(b"bplist00\x00\x01") is True
+
+
+def test_literal_placeholder_does_not_shift_attachments() -> None:
+    """A U+FFFC with no attachment info is dropped and does not consume an attachment."""
+    info = _field_bytes(1, b"ATT-1") + _field_bytes(2, b"com.adobe.pdf")
+    text = "x￼\n￼"
+    runs = [_run(3), _run(1, extra=_field_bytes(12, info))]
+    data = gzip.compress(_build_note(text, runs))
+
+    content = parse_note_data(data, {"ATT-1": "doc.pdf"}, include_formatting=True)
+
+    assert content.text == "x\n[PDF: doc.pdf]"
+    assert content.formatted_runs is not None
+    assert [r.attachment_identifier for r in content.formatted_runs] == [None, "ATT-1"]
+    markdown = note_to_markdown(content, {})
+    assert "[PDF: doc.pdf]" in markdown
+    assert "￼" not in markdown

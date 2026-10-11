@@ -126,6 +126,9 @@ def _process_attachments(
             else:
                 marker = f"[{type_name}]"
             run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, marker)
+        else:
+            # Literal U+FFFC with no attachment info: not an attachment.
+            run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, "")
 
         result.append(run_text)
         text_pos += run_length
@@ -381,6 +384,17 @@ def _extract_formatting(
                     except UnicodeDecodeError:
                         pass
 
+            # Extract attachment identifier (field 12 = AttachmentInfo, field 1)
+            attachment_identifier = None
+            if 12 in run and isinstance(run[12][0][1], bytes):
+                info = _decode_fields(run[12][0][1])
+                if 1 in info and isinstance(info[1][0][1], bytes):
+                    attachment_identifier = info[1][0][1].decode("utf-8", errors="replace")
+            if attachment_identifier is None:
+                # A U+FFFC without attachment info is a literal character
+                # (e.g. left by pasted rich text), not an attachment.
+                run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, "")
+
             formatted_runs.append(
                 FormattedRun(
                     text=run_text,
@@ -388,6 +402,7 @@ def _extract_formatting(
                     text_style=text_style,
                     paragraph_style=para_style,
                     link=link,
+                    attachment_identifier=attachment_identifier,
                 )
             )
 
