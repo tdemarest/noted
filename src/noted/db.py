@@ -154,6 +154,41 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _trash_folder_ids(conn: sqlite3.Connection) -> list[int]:
+    """Return Z_PKs of Recently Deleted folders (ZFOLDERTYPE = 1).
+
+    Notes moves a deleted note into this folder rather than setting
+    ZMARKEDFORDELETION, so folder membership is the primary trash signal.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")}
+    if "ZFOLDERTYPE" not in columns:
+        return []
+    cursor = conn.execute("SELECT Z_PK FROM ZICCLOUDSYNCINGOBJECT WHERE ZFOLDERTYPE = 1")
+    return [int(row[0]) for row in cursor]
+
+
+def deleted_note_sql(conn: sqlite3.Connection, alias: str = "n") -> str:
+    """Build a SQL expression that is true for notes in the trash.
+
+    A note is deleted if it is marked for deletion or sits in a Recently
+    Deleted folder.
+
+    Args:
+        conn: Database connection (used to look up trash folder ids).
+        alias: Table alias of the note row, or "" for none.
+
+    Returns:
+        Parenthesized SQL boolean expression.
+    """
+    prefix = f"{alias}." if alias else ""
+    expr = f"IFNULL({prefix}ZMARKEDFORDELETION, 0) = 1"
+    trash_ids = _trash_folder_ids(conn)
+    if trash_ids:
+        ids = ", ".join(str(pk) for pk in trash_ids)
+        expr += f" OR IFNULL({prefix}ZFOLDER, -1) IN ({ids})"
+    return f"({expr})"
+
+
 def list_notes(
     conn: sqlite3.Connection,
     folder: str | None = None,
@@ -171,7 +206,7 @@ def list_notes(
     Returns:
         List of Note objects sorted by modification date (newest first).
     """
-    query = """
+    query = f"""
         SELECT
             n.Z_PK as id,
             n.ZIDENTIFIER as identifier,
@@ -185,7 +220,7 @@ def list_notes(
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZTITLE1 IS NOT NULL
-          AND n.ZMARKEDFORDELETION != 1
+          AND NOT {deleted_note_sql(conn)}
     """
     params: list[str | int] = []
 
@@ -236,11 +271,11 @@ def count_notes(conn: sqlite3.Connection) -> int:
     Returns:
         Total number of notes.
     """
-    query = """
+    query = f"""
         SELECT COUNT(*)
         FROM ZICCLOUDSYNCINGOBJECT
         WHERE ZTITLE1 IS NOT NULL
-          AND ZMARKEDFORDELETION != 1
+          AND NOT {deleted_note_sql(conn, "")}
     """
     cursor = conn.execute(query)
     return cursor.fetchone()[0]
@@ -260,14 +295,14 @@ def get_summary(conn: sqlite3.Connection, by_folder: bool = False) -> NoteSummar
     folder_counts: dict[str, int] = {}
 
     if by_folder:
-        query = """
+        query = f"""
             SELECT
                 COALESCE(f.ZTITLE2, '(No Folder)') as folder,
                 COUNT(*) as count
             FROM ZICCLOUDSYNCINGOBJECT n
             LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
             WHERE n.ZTITLE1 IS NOT NULL
-              AND n.ZMARKEDFORDELETION != 1
+              AND NOT {deleted_note_sql(conn)}
             GROUP BY f.ZTITLE2
             ORDER BY count DESC
         """
@@ -296,11 +331,12 @@ def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> Dat
     """
     # Total notes (non-deleted)
     total_notes = count_notes(conn)
+    not_deleted = f"NOT {deleted_note_sql(conn, '')}"
 
     # Pinned notes
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZTITLE1 IS NOT NULL AND ZISPINNED = 1 AND ZMARKEDFORDELETION != 1
+        WHERE ZTITLE1 IS NOT NULL AND ZISPINNED = 1 AND {not_deleted}
     """)
     pinned_notes = cursor.fetchone()[0]
 
@@ -312,37 +348,37 @@ def get_database_stats(conn: sqlite3.Connection, by_folder: bool = False) -> Dat
     locked_notes = cursor.fetchone()[0]
 
     # Deleted notes
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZTITLE1 IS NOT NULL AND ZMARKEDFORDELETION = 1
+        WHERE ZTITLE1 IS NOT NULL AND {deleted_note_sql(conn, "")}
     """)
     deleted_notes = cursor.fetchone()[0]
 
     # Notes with checklists
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLIST = 1 AND ZMARKEDFORDELETION != 1
+        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLIST = 1 AND {not_deleted}
     """)
     notes_with_checklists = cursor.fetchone()[0]
 
     # Notes with incomplete checklists
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT
-        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLISTINPROGRESS = 1 AND ZMARKEDFORDELETION != 1
+        WHERE ZTITLE1 IS NOT NULL AND ZHASCHECKLISTINPROGRESS = 1 AND {not_deleted}
     """)
     notes_with_incomplete_checklists = cursor.fetchone()[0]
 
     # Folder counts (optional)
     folder_counts: dict[str, int] = {}
     if by_folder:
-        cursor = conn.execute("""
+        cursor = conn.execute(f"""
             SELECT
                 COALESCE(f.ZTITLE2, '(No Folder)') as folder,
                 COUNT(*) as count
             FROM ZICCLOUDSYNCINGOBJECT n
             LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
             WHERE n.ZTITLE1 IS NOT NULL
-              AND n.ZMARKEDFORDELETION != 1
+              AND NOT {deleted_note_sql(conn)}
             GROUP BY f.ZTITLE2
             ORDER BY count DESC
         """)
@@ -464,7 +500,7 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
     Returns:
         Note object, or None if not found.
     """
-    query = """
+    query = f"""
         SELECT
             n.Z_PK as id,
             n.ZIDENTIFIER as identifier,
@@ -476,7 +512,7 @@ def get_note_by_id(conn: sqlite3.Connection, note_id: int) -> Note | None:
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.Z_PK = ?
           AND n.ZTITLE1 IS NOT NULL
-          AND n.ZMARKEDFORDELETION != 1
+          AND NOT {deleted_note_sql(conn)}
     """
     cursor = conn.execute(query, (note_id,))
     row = cursor.fetchone()
@@ -502,7 +538,7 @@ def get_note_by_identifier(conn: sqlite3.Connection, identifier: str) -> Note | 
     Returns:
         Note object, or None if not found.
     """
-    query = """
+    query = f"""
         SELECT
             n.Z_PK as id,
             n.ZIDENTIFIER as identifier,
@@ -514,7 +550,7 @@ def get_note_by_identifier(conn: sqlite3.Connection, identifier: str) -> Note | 
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZIDENTIFIER = ?
           AND n.ZTITLE1 IS NOT NULL
-          AND n.ZMARKEDFORDELETION != 1
+          AND NOT {deleted_note_sql(conn)}
     """
     cursor = conn.execute(query, (identifier,))
     row = cursor.fetchone()
@@ -575,7 +611,7 @@ def get_all_notes(
     # Get folder paths lookup first
     folder_paths = get_folder_paths(conn)
 
-    query = """
+    query = f"""
         SELECT
             n.Z_PK as id,
             n.ZIDENTIFIER as identifier,
@@ -584,7 +620,7 @@ def get_all_notes(
             f.ZTITLE2 as folder_name,
             n.ZCREATIONDATE3 as created,
             n.ZMODIFICATIONDATE1 as modified,
-            n.ZMARKEDFORDELETION as deleted
+            {deleted_note_sql(conn)} as deleted
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
         WHERE n.ZTITLE1 IS NOT NULL
@@ -592,7 +628,7 @@ def get_all_notes(
     params: list[str | int] = []
 
     if not include_deleted:
-        query += " AND (n.ZMARKEDFORDELETION IS NULL OR n.ZMARKEDFORDELETION != 1)"
+        query += f" AND NOT {deleted_note_sql(conn)}"
 
     query += " ORDER BY f.ZTITLE2, n.ZMODIFICATIONDATE1 DESC"
 
@@ -760,11 +796,9 @@ def _count_smart_folder_notes(
             elif "deleted" in cond:
                 # Deleted query
                 if cond["deleted"]:
-                    sql_conditions.append("n.ZMARKEDFORDELETION = 1")
+                    sql_conditions.append(deleted_note_sql(conn))
                 else:
-                    sql_conditions.append(
-                        "(n.ZMARKEDFORDELETION != 1 OR n.ZMARKEDFORDELETION IS NULL)"
-                    )
+                    sql_conditions.append(f"NOT {deleted_note_sql(conn)}")
 
             elif "modificationDateRelativeRange" in cond:
                 # Date range query

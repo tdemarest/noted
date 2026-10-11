@@ -10,6 +10,8 @@ from noted.db import (
     _source_db_path,
     apple_timestamp_to_datetime,
     clear_cache,
+    count_notes,
+    deleted_note_sql,
     get_connection,
     get_note_by_id,
     get_note_content,
@@ -566,4 +568,47 @@ def test_get_folders(tmp_path: Path) -> None:
     assert folders[0].name == "Work"
     assert folders[0].note_count == 2
 
+    conn.close()
+
+
+def test_recently_deleted_folder_counts_as_deleted(tmp_path: Path) -> None:
+    """Notes in the Recently Deleted folder (ZFOLDERTYPE 1) are treated as deleted."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTITLE1 TEXT,
+            ZTITLE2 TEXT,
+            ZFOLDER INTEGER,
+            ZFOLDERTYPE INTEGER,
+            ZCREATIONDATE3 REAL,
+            ZMODIFICATIONDATE1 REAL,
+            ZMARKEDFORDELETION INTEGER DEFAULT 0
+        )
+    """)
+    conn.executemany(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZTITLE1, ZTITLE2, ZFOLDER, ZFOLDERTYPE,"
+        " ZMARKEDFORDELETION) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (1, None, "Notes", None, 0, 0),
+            (2, None, "Recently Deleted", None, 1, 0),
+            (3, "Kept", None, 1, None, 0),
+            (4, "Trashed", None, 2, None, 0),
+            (5, "Flagged", None, 1, None, 1),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    assert count_notes(conn) == 1
+    assert get_note_by_id(conn, 4) is None
+    deleted = conn.execute(
+        f"SELECT Z_PK FROM ZICCLOUDSYNCINGOBJECT n WHERE {deleted_note_sql(conn)}"
+    )
+    assert sorted(row[0] for row in deleted) == [4, 5]
     conn.close()
