@@ -34,6 +34,14 @@ class FolderInfo:
     folder_type: int = 0
 
 
+class DatabaseNotFoundError(FileNotFoundError):
+    """Raised when the source Apple Notes database file does not exist.
+
+    Subclasses FileNotFoundError so generic handlers still work, while letting
+    callers distinguish a missing Notes database from unrelated missing files.
+    """
+
+
 # Apple Notes database location
 NOTES_DIR = Path.home() / "Library/Group Containers/group.com.apple.notes"
 MARKED_UP_PDF_UTI = "com.apple.paper.doc.pdf"
@@ -94,7 +102,8 @@ def _cache_is_fresh() -> bool:
     """Check if cached copy exists and is newer than source.
 
     Returns:
-        True if cache exists and is at least as new as source.
+        True if cache exists and is at least as new as source. False if the
+        cache is missing, older than the source, or the source is missing.
     """
     cached = CACHE_DIR / "NoteStore.sqlite"
     if not cached.exists():
@@ -109,14 +118,19 @@ def ensure_cached_db() -> Path:
     """Ensure database is cached, copying if stale or missing.
 
     Copies all SQLite files (db, wal, shm) to cache directory.
-    Only copies if source is newer than cache.
+    Only copies if source is newer than cache. The -wal and -shm files
+    are optional; the main database file is required.
 
     Returns:
         Path to cached NoteStore.sqlite.
 
     Raises:
-        FileNotFoundError: If source database doesn't exist.
+        DatabaseNotFoundError: If the source NoteStore.sqlite doesn't exist,
+            whether or not a cached copy exists.
     """
+    source = _source_db_path()
+    if not source.exists():
+        raise DatabaseNotFoundError(f"Apple Notes database not found: {source}")
     if not _cache_is_fresh():
         logger.info("Cache stale or missing, copying database...")
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -150,6 +164,9 @@ def get_connection() -> sqlite3.Connection:
 
     Returns:
         SQLite connection in read-only mode.
+
+    Raises:
+        DatabaseNotFoundError: If the source Apple Notes database doesn't exist.
     """
     db_path = ensure_cached_db()
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)

@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from noted.db import (
+    DatabaseNotFoundError,
     _cache_is_fresh,
     _source_db_path,
     apple_timestamp_to_datetime,
@@ -13,6 +16,7 @@ from noted.db import (
     clear_cache,
     count_notes,
     deleted_note_sql,
+    ensure_cached_db,
     get_attachment_data,
     get_connection,
     get_note_by_id,
@@ -55,6 +59,48 @@ def test_cache_is_fresh_no_cache(tmp_path: Path) -> None:
         assert _cache_is_fresh() is False
 
 
+def test_ensure_cached_db_missing_source_no_cache(tmp_path: Path) -> None:
+    """Test that a missing source DB raises when no cache exists."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    cache_dir = tmp_path / "cache"
+    with (
+        patch("noted.db.NOTES_DIR", source_dir),
+        patch("noted.db.CACHE_DIR", cache_dir),
+        pytest.raises(DatabaseNotFoundError, match="NoteStore.sqlite") as exc_info,
+    ):
+        ensure_cached_db()
+    assert str(source_dir / "NoteStore.sqlite") in str(exc_info.value)
+
+
+def test_ensure_cached_db_missing_source_with_cache(tmp_path: Path) -> None:
+    """Test that a missing source DB raises even when a stale cache exists."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    (cache_dir / "NoteStore.sqlite").write_bytes(b"cached")
+    with (
+        patch("noted.db.NOTES_DIR", source_dir),
+        patch("noted.db.CACHE_DIR", cache_dir),
+        pytest.raises(DatabaseNotFoundError) as exc_info,
+    ):
+        ensure_cached_db()
+    assert str(source_dir / "NoteStore.sqlite") in str(exc_info.value)
+
+
+def test_ensure_cached_db_copies_without_wal_shm(tmp_path: Path) -> None:
+    """Test that the -wal and -shm files remain optional when caching."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "NoteStore.sqlite").write_bytes(b"source")
+    cache_dir = tmp_path / "cache"
+    with patch("noted.db.NOTES_DIR", source_dir), patch("noted.db.CACHE_DIR", cache_dir):
+        cached = ensure_cached_db()
+    assert cached == cache_dir / "NoteStore.sqlite"
+    assert cached.read_bytes() == b"source"
+
+
 def test_clear_cache(tmp_path: Path) -> None:
     """Test clearing the cache directory."""
     with patch("noted.db.CACHE_DIR", tmp_path):
@@ -88,12 +134,9 @@ def test_get_connection(tmp_path: Path) -> None:
         conn = get_connection()
         assert conn is not None
         # Verify it's read-only by trying to write
-        try:
+        with pytest.raises(sqlite3.OperationalError, match="(?i)readonly"):
             conn.execute("INSERT INTO test VALUES (1)")
             conn.commit()
-            assert False, "Should have raised error for read-only"
-        except sqlite3.OperationalError as e:
-            assert "readonly" in str(e).lower()
         conn.close()
 
 

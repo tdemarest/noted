@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from noted.cli import app
@@ -592,3 +593,41 @@ def test_export_markdown_flag_writes_markdown(tmp_path: Path) -> None:
     mock_json.assert_not_called()
     mock_html.assert_not_called()
     assert (tmp_path / "out.md").read_text(encoding="utf-8") == "# Test Note\n"
+
+
+def test_list_missing_source_db_names_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that list exits 1 and names the path when the source DB is missing."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    monkeypatch.setattr("noted.db.NOTES_DIR", source_dir)
+    monkeypatch.setattr("noted.db.CACHE_DIR", tmp_path / "cache")
+    result = runner.invoke(app, ["list"])
+    assert result.exit_code == 1
+    output = result.output.replace("\n", "")
+    assert "database not found" in output
+    assert str(source_dir / "NoteStore.sqlite") in output
+
+
+def test_list_unrelated_file_not_found_not_reported_as_db_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that an unrelated FileNotFoundError reports the real error."""
+
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        """Raise an unrelated FileNotFoundError.
+
+        Args:
+            *_args: Ignored positional arguments.
+            **_kwargs: Ignored keyword arguments.
+
+        Raises:
+            FileNotFoundError: Always.
+        """
+        raise FileNotFoundError("unrelated-missing-file.txt")
+
+    monkeypatch.setattr("noted.cli.db.get_connection", lambda: None)
+    monkeypatch.setattr("noted.cli.db.list_notes", _raise_missing)
+    result = runner.invoke(app, ["list"])
+    assert result.exit_code == 1
+    assert "database not found" not in result.output
+    assert "unrelated-missing-file.txt" in result.output

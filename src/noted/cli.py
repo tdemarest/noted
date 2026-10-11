@@ -155,9 +155,9 @@ def list_cmd(
             display.display_notes_table(notes, search=search_query)
 
         conn.close()
-    except FileNotFoundError:
-        display.display_error("Apple Notes database not found.")
-        raise typer.Exit(code=1)
+    except db.DatabaseNotFoundError as e:
+        display.display_error(str(e))
+        raise typer.Exit(code=1) from None
     except Exception as e:
         logger.exception("Error listing notes")
         display.display_error(str(e))
@@ -211,9 +211,9 @@ def stats(
             print(display.stats_to_json(stats_data))
         else:
             display.display_stats(stats_data)
-    except FileNotFoundError:
-        display.display_error("Apple Notes database not found.")
-        raise typer.Exit(code=1)
+    except db.DatabaseNotFoundError as e:
+        display.display_error(str(e))
+        raise typer.Exit(code=1) from None
     except Exception as e:
         logger.exception("Error getting database stats")
         display.display_error(str(e))
@@ -274,9 +274,9 @@ def index(
                         "\n[dim]Index is stale. Run [bold]noted index --rebuild[/bold] "
                         "or it will auto-rebuild on next deep search.[/dim]"
                     )
-    except FileNotFoundError:
-        display.display_error("Apple Notes database not found.")
-        raise typer.Exit(code=1)
+    except db.DatabaseNotFoundError as e:
+        display.display_error(str(e))
+        raise typer.Exit(code=1) from None
     except Exception as e:
         logger.exception("Error managing FTS index")
         display.display_error(str(e))
@@ -471,9 +471,9 @@ def view(
 
         conn.close()
 
-    except FileNotFoundError:
-        display.display_error("Apple Notes database not found.")
-        raise typer.Exit(code=1)
+    except db.DatabaseNotFoundError as e:
+        display.display_error(str(e))
+        raise typer.Exit(code=1) from None
     except typer.Exit:
         raise
     except Exception as e:
@@ -707,9 +707,9 @@ def export(
                     f"Skipped {len(att_result.skipped)} non-exportable: {summary}"
                 )
 
-    except FileNotFoundError:
-        display.display_error("Apple Notes database not found.")
-        raise typer.Exit(code=1)
+    except db.DatabaseNotFoundError as e:
+        display.display_error(str(e))
+        raise typer.Exit(code=1) from None
     except typer.Exit:
         raise
     except Exception as e:
