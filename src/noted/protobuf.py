@@ -332,14 +332,9 @@ def _extract_formatting(
                         para_style.paragraph_type = style[1][0][1]
                     if 2 in style:
                         para_style.alignment = style[2][0][1]
-                    if 3 in style:
-                        para_style.indent_level = style[3][0][1]
+                    # Field 3 is writingDirection (stored as value + 1), not indent.
                     if 4 in style:
-                        # style.4 is used for text indentation (not list indent)
-                        para_style.indent_level = max(
-                            para_style.indent_level,
-                            style[4][0][1],
-                        )
+                        para_style.indent_level = style[4][0][1]
                     if 5 in style:
                         # style.5 is a message containing checked state for checklists
                         # The checked flag is in field 2 of this nested message

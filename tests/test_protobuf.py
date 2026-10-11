@@ -160,3 +160,53 @@ def test_parse_note_with_attachment_names() -> None:
 
     assert "[PDF: report.pdf]" in result_text
     assert attachments[0].title == "report.pdf"
+
+
+def _varint(value: int) -> bytes:
+    """Encode an unsigned protobuf varint."""
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _field_varint(field: int, value: int) -> bytes:
+    """Encode a varint field."""
+    return _varint(field << 3) + _varint(value)
+
+
+def _field_bytes(field: int, value: bytes) -> bytes:
+    """Encode a length-delimited field."""
+    return _varint((field << 3) | 2) + _varint(len(value)) + value
+
+
+def _build_note(text: str, runs: list[bytes]) -> bytes:
+    """Build an uncompressed NoteStoreProto with the given text and attribute runs."""
+    note = _field_bytes(2, text.encode("utf-8")) + b"".join(_field_bytes(5, r) for r in runs)
+    return _field_bytes(2, _field_bytes(3, note))
+
+
+def _run(length: int, paragraph_style: bytes = b"", extra: bytes = b"") -> bytes:
+    """Build an attribute run with an optional paragraph style and extra fields."""
+    run = _field_varint(1, length)
+    if paragraph_style:
+        run += _field_bytes(2, paragraph_style)
+    return run + extra
+
+
+def test_writing_direction_is_not_indent() -> None:
+    """Paragraph style field 3 (writing direction) must not be read as indent."""
+    bullet_ltr = _field_varint(1, 100) + _field_varint(3, 1)
+    nested = _field_varint(1, 100) + _field_varint(3, 1) + _field_varint(4, 1)
+    data = gzip.compress(_build_note("a\nb\n", [_run(2, bullet_ltr), _run(2, nested)]))
+
+    result = parse_note_data(data, include_formatting=True)
+
+    assert result.formatted_runs is not None
+    levels = [r.paragraph_style.indent_level for r in result.formatted_runs if r.paragraph_style]
+    assert levels == [0, 1]
