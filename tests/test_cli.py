@@ -2,6 +2,7 @@
 
 import gzip
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -520,3 +521,74 @@ def test_export_all_not_with_note_id() -> None:
     result = runner.invoke(app, ["export", "42", "--all"])
     assert result.exit_code == 1
     assert "cannot" in result.output.lower()
+
+
+def _export_test_note() -> tuple[Note, bytes]:
+    """Build a sample note and its gzip-compressed protobuf body for export tests."""
+    mock_note = Note(
+        id=42,
+        identifier="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+        title="Test Note",
+        folder="Work",
+        created=None,
+        modified=None,
+    )
+    note_proto = b"\x12\x0dHello, world!"
+    doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
+    root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
+    return mock_note, gzip.compress(root_proto)
+
+
+def test_export_markdown_conflicts_with_json(tmp_path: Path) -> None:
+    """Test export rejects --markdown combined with --json instead of silently picking one."""
+    mock_note, compressed = _export_test_note()
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.load_attachment_content"),
+    ):
+        result = runner.invoke(
+            app, ["export", "42", "--markdown", "--json", "-o", str(tmp_path / "out")]
+        )
+
+    assert result.exit_code == 1
+    assert "only one format" in result.output.lower()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_export_markdown_rejected_with_all(tmp_path: Path) -> None:
+    """Test export --all rejects --markdown like the other single-note format options."""
+    with (
+        patch("noted.cli.db.get_connection") as mock_conn,
+        patch("noted.cli.export_module.export_all_notes") as mock_export_all,
+    ):
+        result = runner.invoke(app, ["export", "--all", "--markdown", "-o", str(tmp_path / "out")])
+
+    assert result.exit_code == 1
+    assert "single note export" in result.output.lower()
+    mock_conn.assert_not_called()
+    mock_export_all.assert_not_called()
+
+
+def test_export_markdown_flag_writes_markdown(tmp_path: Path) -> None:
+    """Test export --markdown alone takes the markdown path and writes a .md file."""
+    mock_note, compressed = _export_test_note()
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+        patch("noted.cli.db.get_attachment_names", return_value={}),
+        patch("noted.cli.db.load_attachment_content"),
+        patch("noted.cli.display.get_note_markdown", return_value="# Test Note\n") as mock_md,
+        patch("noted.cli.display.get_note_json") as mock_json,
+        patch("noted.cli.display.get_note_html") as mock_html,
+    ):
+        result = runner.invoke(app, ["export", "42", "--markdown", "-o", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.output
+    mock_md.assert_called_once()
+    mock_json.assert_not_called()
+    mock_html.assert_not_called()
+    assert (tmp_path / "out.md").read_text(encoding="utf-8") == "# Test Note\n"

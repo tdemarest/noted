@@ -527,7 +527,7 @@ def export(
         False,
         "--markdown",
         "-md",
-        help="Export as markdown (default for single note).",
+        help="Export as markdown (the default format; single note only).",
     ),
     fmt_json: bool = typer.Option(
         False,
@@ -561,10 +561,19 @@ def export(
         raise typer.Exit(code=1)
 
     # Validate: format options only apply to single note export
-    format_options_used = fmt_json or fmt_json_styled or fmt_html
+    format_options_used = fmt_markdown or fmt_json or fmt_json_styled or fmt_html
     if all_notes and format_options_used:
         display.display_error(
-            "Format options (--json, --json-styled, --html) only apply to single note export."
+            "Format options (--markdown, --json, --json-styled, --html) only apply to "
+            "single note export."
+        )
+        raise typer.Exit(code=1)
+
+    # Validate: --markdown cannot be combined with another output format
+    if fmt_markdown and (fmt_json or fmt_json_styled or fmt_html):
+        display.display_error(
+            "Choose only one format: --markdown cannot be combined with "
+            "--json, --json-styled or --html."
         )
         raise typer.Exit(code=1)
 
@@ -652,7 +661,7 @@ def export(
                 output_content = display.get_note_html(note, content)
                 ext = ".html"
             else:
-                # Default to markdown (explicit --markdown or no format specified)
+                # Markdown: explicit --markdown or no format flag given
                 output_content = display.get_note_markdown(note, content)
                 ext = ".md"
 
