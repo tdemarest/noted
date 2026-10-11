@@ -23,13 +23,51 @@ build-backend = "hatchling.build"
 packages = ["src/noted"]
 
 [tool.ruff]
-line-length = 100
 target-version = "py314"
+line-length = 100
+src = ["src", "tests"]
 # Canonical project-init hooks stay verbatim so template diffs stay clean.
 extend-exclude = [".claude"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = [
+    "F",      # pyflakes
+    "E", "W", # pycodestyle
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "SIM",    # flake8-simplicity
+    "T20",    # flake8-print
+    "RUF",    # ruff-specific
+    "D",      # pydocstyle
+    "ANN",    # flake8-annotations
+]
+ignore = [
+    "D100",   # missing docstring in public module (handled per-file)
+    "D104",   # missing docstring in public package
+]
+# Intended glyphs: multiplication sign in attachment counts, en dash for dashed-list bullets.
+allowed-confusables = ["×", "–"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer requires Option/Argument as defaults; the betterproto2 helpers return
+# dataclasses.field(default_factory=...), so defaults are never shared.
+extend-immutable-calls = [
+    "typer.Option",
+    "typer.Argument",
+    "betterproto2.field",
+    "noted.tables._message",
+    "noted.tables._repeated",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Raw JSON/HTML/Markdown goes to stdout by design; Rich would mangle markup.
+"src/noted/cli.py" = ["T201"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -67,7 +67,7 @@ def test_ensure_cached_db_missing_source_no_cache(tmp_path: Path) -> None:
     with (
         patch("noted.db.NOTES_DIR", source_dir),
         patch("noted.db.CACHE_DIR", cache_dir),
-        pytest.raises(DatabaseNotFoundError, match="NoteStore.sqlite") as exc_info,
+        pytest.raises(DatabaseNotFoundError, match=r"NoteStore\.sqlite") as exc_info,
     ):
         ensure_cached_db()
     assert str(source_dir / "NoteStore.sqlite") in str(exc_info.value)
@@ -134,7 +134,7 @@ def test_get_connection(tmp_path: Path) -> None:
         conn = get_connection()
         assert conn is not None
         # Verify it's read-only by trying to write
-        with pytest.raises(sqlite3.OperationalError, match="(?i)readonly"):
+        with pytest.raises(sqlite3.OperationalError, match=r"(?i)readonly"):
             conn.execute("INSERT INTO test VALUES (1)")
             conn.commit()
         conn.close()

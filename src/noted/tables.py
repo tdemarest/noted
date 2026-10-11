@@ -42,7 +42,7 @@ from noted.protobuf import Note
 ICTABLE_TYPE = "com.apple.notes.ICTable"
 
 
-def _repeated(number: int, proto_type: str) -> Any:
+def _repeated(number: int, proto_type: str) -> list[Any]:
     """Declare a repeated betterproto2 field.
 
     Args:
@@ -55,7 +55,7 @@ def _repeated(number: int, proto_type: str) -> Any:
     return betterproto2.field(number, proto_type, repeated=True)
 
 
-def _message(number: int, message_type: type[betterproto2.Message]) -> Any:
+def _message[T: betterproto2.Message](number: int, message_type: type[T]) -> T:
     """Declare a message field that defaults to an empty message instead of None.
 
     betterproto2 defaults unset message fields to None, while the graph walk

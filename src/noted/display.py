@@ -1351,10 +1351,8 @@ def note_to_markdown(
             # Determine indent and prefix
             indent = "  " * (para.indent_level if para else 0)
 
-            if para_type == ParagraphType.BULLET_LIST:
-                prefix = f"{indent}- "
-                last_list_type = para_type
-            elif para_type == ParagraphType.DASHED_LIST:
+            # Markdown has no dashed list, so bullet and dashed lists share "- "
+            if para_type in (ParagraphType.BULLET_LIST, ParagraphType.DASHED_LIST):
                 prefix = f"{indent}- "
                 last_list_type = para_type
             elif para_type == ParagraphType.NUMBERED_LIST:

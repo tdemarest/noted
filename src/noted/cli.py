@@ -161,7 +161,7 @@ def list_cmd(
     except Exception as e:
         logger.exception("Error listing notes")
         display.display_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -217,7 +217,7 @@ def stats(
     except Exception as e:
         logger.exception("Error getting database stats")
         display.display_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -280,7 +280,7 @@ def index(
     except Exception as e:
         logger.exception("Error managing FTS index")
         display.display_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -479,7 +479,7 @@ def view(
     except Exception as e:
         logger.exception("Error viewing note")
         display.display_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -715,7 +715,7 @@ def export(
     except Exception as e:
         logger.exception("Error exporting notes")
         display.display_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":

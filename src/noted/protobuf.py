@@ -4,6 +4,7 @@ Apple Notes stores note content as gzip-compressed (occasionally zlib) protobuf 
 This module defines the betterproto2 schema and parsing functions.
 """
 
+import contextlib
 import zlib
 from dataclasses import dataclass
 from typing import Any
@@ -120,12 +121,9 @@ def _process_attachments(
                 # Inline text attachments display as plain text (e.g., #template)
                 marker = title
             elif title:
-                if type_name == "Attachment":
-                    # For unknown types, just show the filename
-                    marker = f"[{title}]"
-                else:
-                    # For known types (PDF, Image, etc.), show type + filename
-                    marker = f"[{type_name}: {title}]"
+                # Unknown types show just the filename; known types (PDF, Image, etc.)
+                # show type + filename
+                marker = f"[{title}]" if type_name == "Attachment" else f"[{type_name}: {title}]"
             else:
                 marker = f"[{type_name}]"
             run_text = run_text.replace(OBJECT_REPLACEMENT_CHAR, marker)
@@ -381,10 +379,8 @@ def _extract_formatting(
             if 9 in run:
                 val = run[9][0][1]
                 if isinstance(val, bytes):
-                    try:
+                    with contextlib.suppress(UnicodeDecodeError):
                         link = val.decode("utf-8")
-                    except UnicodeDecodeError:
-                        pass
 
             # Extract attachment identifier (field 12 = AttachmentInfo, field 1)
             attachment_identifier = None

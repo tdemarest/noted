@@ -143,7 +143,7 @@ def test_build_index(
     mock_cache_dir: Path,
 ) -> None:
     """Test building the FTS index."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -177,7 +177,7 @@ def test_search_notes_basic(
     mock_cache_dir: Path,
 ) -> None:
     """Test basic content search."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -201,7 +201,7 @@ def test_search_notes_multiple_results(
     mock_cache_dir: Path,
 ) -> None:
     """Test search returning multiple results."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -222,7 +222,7 @@ def test_search_notes_no_results(
     mock_cache_dir: Path,
 ) -> None:
     """Test search with no matching results."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -242,7 +242,7 @@ def test_search_notes_with_limit(
     mock_cache_dir: Path,
 ) -> None:
     """Test search with result limit."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -263,7 +263,7 @@ def test_skip_locked_notes(
     mock_cache_dir: Path,
 ) -> None:
     """Test that locked notes are skipped during indexing."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -288,7 +288,7 @@ def test_index_freshness(
     mock_cache_dir: Path,
 ) -> None:
     """Test index freshness detection."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -325,7 +325,7 @@ def test_get_index_status_with_index(
     mock_cache_dir: Path,
 ) -> None:
     """Test get_index_status with existing index."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (
@@ -349,7 +349,7 @@ def test_search_invalid_fts_syntax(
     mock_cache_dir: Path,
 ) -> None:
     """Test that invalid FTS5 syntax returns empty results."""
-    notes_conn, db_path = mock_notes_db
+    notes_conn, _db_path = mock_notes_db
     index_path = mock_cache_dir / "fts_index.sqlite"
 
     with (

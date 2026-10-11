@@ -3,6 +3,7 @@
 Handles copying, caching, and querying the Notes SQLite database.
 """
 
+import contextlib
 import shutil
 import sqlite3
 from dataclasses import dataclass
@@ -1015,10 +1016,8 @@ def get_attachment_stats(conn: sqlite3.Connection, note_id: int) -> dict[str, in
         if media_id and filename:
             file_path = _find_media_file(media_id, filename)
             if file_path:
-                try:
+                with contextlib.suppress(OSError):  # File not accessible, skip
                     total_size += file_path.stat().st_size
-                except OSError:
-                    pass  # File not accessible, skip
 
     return {
         "count": count,
