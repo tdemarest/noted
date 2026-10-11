@@ -20,18 +20,16 @@ Key tables:
 Column-level detail lives in `docs/apple-notes-*.md` (start with
 `apple-notes-storage-reference.md`).
 
-## CRITICAL RULES
+## Data rules
 
 - The Apple Notes data location is: ~/Library/Group Containers/group.com.apple.notes
   - The SQLite database is: NoteStore.sqlite
   - The SHM file is: NoteStore.sqlite-shm
   - The WAL file is: NoteStore.sqlite-wal
-- Make copies of the sqlite files and never operate on the live versions. The code caches
-  the copy in `~/.cache/noted` (`CACHE_DIR` in `src/noted/db.py`):
-
-```python
-shutil.copy("NoteStore.sqlite", "/tmp/notes_copy.sqlite")
-```
+- Make copies of the sqlite files and never operate on the live versions. Get the copy
+  from `ensure_cached_db()` in `src/noted/db.py`, which copies the database with its
+  `-wal` and `-shm` files into `~/.cache/noted` (`CACHE_DIR`). Copying only
+  `NoteStore.sqlite` drops recent changes that are still in the WAL.
 
 - Use read only mode in development:
 
@@ -163,7 +161,7 @@ All tools below are assumed installed on the system and in Claude.
 
 ## Git & Branching
 
-- **Conventional Commits** - `type(scope): lowercase imperative description`; types `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `style`, `data`; scope matches the subsystem (see also the Workflow bullet above).
+- **Conventional Commits** - `type(scope): lowercase imperative description`; types `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `style`, `data`; scope matches the subsystem.
 - **Trunk-based** - work directly on `main`; rebase to keep history linear.
 - **No Claude attribution** - never add `Co-Authored-By: Claude`, `Generated with Claude Code`, or any other AI-attribution trailer to commits or PRs. Enforced by `attribution: {commit: "", pr: ""}` in `.claude/settings.json`, and backstopped by the `commit-msg` git hook `.claude/hooks/strip-ai-attribution.sh`, which strips such lines from every commit message regardless of settings; do not re-add it manually.
 
