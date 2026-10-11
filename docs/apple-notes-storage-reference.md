@@ -4,6 +4,14 @@
 
 Oct 10, 2026 · @Timothy Demarest
 
+Related docs (deep-dives that complement this reference; where they disagree, this document wins):
+
+- [Database fields](./apple-notes-database-fields.md) - column lists, smart folder queries, hashtags, sharing, encryption, example SQL
+- [Attachment structure](./apple-notes-attachment-structure.md) - attachment and media columns, exportable UTIs, export conventions
+- [CRDT table structure](./apple-notes-crdt-table-structure.md) - protobuf layout and decoding steps for tables
+- [Formatting structure](./apple-notes-formatting-structure.md) - attribute run fields, lists, checklists, rendering notes
+- [Timestamp structure](./apple-notes-timestamp-structure.md) - date columns per entity, conversion code
+
 ## Summary
 
 All 14 questions are answered from evidence, including live tests on an iPhone and on this Mac. Attachment and folder types are confirmed from decompiled Notes code. Reading a library needs no further reverse engineering: bodies and tables decode with the public protobuf definitions, and every file path follows a fixed pattern.
@@ -223,6 +231,8 @@ The other file kinds use the attachment's own `ZIDENTIFIER`:
 | Marked-up PDF fallback | `FallbackPDFs/<attachment id>/<ZFALLBACKPDFGENERATION>/FallbackPDF.pdf` | 19 of 19 |
 | Marked-up PDF bundle | `Paper/Bundles/<attachment id>.bundle/` | 19 of 19 |
 
+`ZFILESIZE` on media rows is usually NULL, so take file sizes from the disk instead.
+
 Preview width and height are stored as floats and must be truncated to integers to build the name; truncation matched every row, rounding only 75%. Tables (331), URL cards (36), marked-up PDFs (19) and the drawing have no media row: their content lives in the database or in the paper bundle.
 
 ### Q7. Marked-up PDFs
@@ -335,7 +345,7 @@ A note link is an inline attachment with UTI `com.apple.notes.inlinetextattachme
 applenotes:note/<note UUID>?ownerIdentifier=_<32 hex>
 ```
 
-All 29 links resolve: the UUID matches a note's `ZIDENTIFIER` (29 of 29). `ownerIdentifier` is the same on every row, likely the CloudKit user record name. Hashtag inline attachments work the same way: their token text matches `ICHashtag.ZSTANDARDIZEDCONTENT` for 22 of 22.
+All 29 links resolve: the UUID matches a note's `ZIDENTIFIER` (29 of 29). `ownerIdentifier` is the same on every row, likely the CloudKit user record name. The inline attachment UTIs are `com.apple.notes.inlinetextattachment.hashtag`, `.link`, `.dividerline` and `.mention`; they live in `ZTYPEUTI1` and join to the note through `ZNOTE1`. Hashtag inline attachments work the same way: their token text matches `ICHashtag.ZSTANDARDIZEDCONTENT` for 22 of 22.
 
 ## Method, privacy and limits
 

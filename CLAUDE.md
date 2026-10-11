@@ -103,9 +103,12 @@ noted/
 │   ├── test_search.py      # FTS5 search tests
 │   └── test_tables.py      # Table parsing tests
 └── docs/
-    ├── apple-notes-attachment-structure.md  # Attachment storage documentation
-    ├── apple-notes-crdt-table-structure.md  # Table CRDT documentation
-    ├── apple-notes-storage-reference.md     # Full storage reference (REA-verified schema, enums, paths, reader recipe)
+    ├── apple-notes-storage-reference.md     # Canonical storage reference (REA-verified schema, enums, paths, reader recipe)
+    ├── apple-notes-database-fields.md       # Column-level deep-dive: note flags, smart folders, hashtags, sharing, SQL
+    ├── apple-notes-attachment-structure.md  # Attachment/media columns, exportable UTIs, export conventions
+    ├── apple-notes-crdt-table-structure.md  # Table CRDT protobuf layout and decoding steps
+    ├── apple-notes-formatting-structure.md  # Attribute run fields, lists, checklists, rendering notes
+    ├── apple-notes-timestamp-structure.md   # Date columns per entity, epoch conversion
     └── plans/              # Design and implementation plans
 ```
 
