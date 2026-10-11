@@ -242,3 +242,27 @@ def test_literal_placeholder_does_not_shift_attachments() -> None:
     markdown = note_to_markdown(content, {})
     assert "[PDF: doc.pdf]" in markdown
     assert "￼" not in markdown
+
+
+def test_note_link_and_divider_render() -> None:
+    """Note links render as their title and divider lines as a rule."""
+    link = _field_bytes(1, b"L-1") + _field_bytes(2, b"com.apple.notes.inlinetextattachment.link")
+    divider = _field_bytes(1, b"D-1") + _field_bytes(
+        2, b"com.apple.notes.inlinetextattachment.dividerline"
+    )
+    text = "￼\n￼"
+    runs = [
+        _run(1, extra=_field_bytes(12, link)),
+        _run(1),
+        _run(1, extra=_field_bytes(12, divider)),
+    ]
+    data = gzip.compress(_build_note(text, runs))
+    names = {"L-1": "Other note", "D-1": "-"}
+
+    content = parse_note_data(data, names, include_formatting=True)
+
+    assert content.text == "Other note\n---"
+    markdown = note_to_markdown(content, {})
+    assert "Other note" in markdown
+    assert "---" in markdown
+    assert "[Attachment" not in markdown

@@ -29,6 +29,14 @@ from noted.models import (
 
 console = Console()
 
+DIVIDER_UTI = "com.apple.notes.inlinetextattachment.dividerline"
+# Inline attachments rendered as their alt text (tag name, linked note title)
+INLINE_TEXT_UTIS = (
+    "com.apple.notes.inlinetextattachment.hashtag",
+    "com.apple.notes.inlinetextattachment.mention",
+    "com.apple.notes.inlinetextattachment.link",
+)
+
 
 def display_notes_table(notes: list[Note], search: str | None = None) -> None:
     """Render notes as a Rich table.
@@ -900,14 +908,9 @@ def _render_formatted_content(
                     console.print(rich_table)
                 elif att.type_uti == "com.apple.notes.table":
                     console.print("[Table]", end="")
-                elif (
-                    att.type_uti
-                    in (
-                        "com.apple.notes.inlinetextattachment.hashtag",
-                        "com.apple.notes.inlinetextattachment.mention",
-                    )
-                    and att.title
-                ):
+                elif att.type_uti == DIVIDER_UTI:
+                    console.rule()
+                elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     # Inline text attachments display as plain text
                     console.print(att.title, end="")
                 elif att.title:
@@ -1256,7 +1259,6 @@ def note_to_markdown(
             if current_line:
                 lines.append(current_line)
                 current_line = ""
-            # Look up attachment by order
             att = attachments_by_id.get(run.attachment_identifier or "")
             if att is not None:
                 if att.type_uti == "com.apple.notes.table":
@@ -1264,14 +1266,9 @@ def note_to_markdown(
                         lines.append(table_to_markdown(table_lookup[att.identifier]))
                     else:
                         lines.append("[Table]")
-                elif (
-                    att.type_uti
-                    in (
-                        "com.apple.notes.inlinetextattachment.hashtag",
-                        "com.apple.notes.inlinetextattachment.mention",
-                    )
-                    and att.title
-                ):
+                elif att.type_uti == DIVIDER_UTI:
+                    lines.append("---")
+                elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     # Inline text attachments display as plain text
                     lines.append(att.title)
                 else:
@@ -2104,6 +2101,10 @@ def _note_to_html(
                 if att.type_uti == "com.apple.notes.table":
                     if att.identifier in table_lookup:
                         lines.append(_table_to_html(table_lookup[att.identifier]))
+                elif att.type_uti == DIVIDER_UTI:
+                    lines.append("            <hr>")
+                elif att.type_uti in INLINE_TEXT_UTIS and att.title:
+                    lines.append(f"            <p>{html.escape(att.title)}</p>")
                 else:
                     # Output marker with type and title for linking
                     type_name = _attachment_type_name(att.type_uti)

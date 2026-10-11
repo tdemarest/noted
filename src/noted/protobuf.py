@@ -45,6 +45,8 @@ UTI_TYPE_MAP: dict[str, str] = {
     "com.apple.notes.inlinetextattachment": "Text",
     "com.apple.notes.inlinetextattachment.hashtag": "Tag",
     "com.apple.notes.inlinetextattachment.mention": "Mention",
+    "com.apple.notes.inlinetextattachment.link": "Note link",
+    "com.apple.notes.inlinetextattachment.dividerline": "Divider",
 }
 
 
@@ -113,7 +115,9 @@ def _process_attachments(
             if type_name == "Table" and identifier:
                 # Use unique marker for tables to enable inline rendering
                 marker = f"[Table:{identifier}]"
-            elif type_name in ("Tag", "Mention") and title:
+            elif type_name == "Divider":
+                marker = "---"
+            elif type_name in ("Tag", "Mention", "Note link") and title:
                 # Inline text attachments display as plain text (e.g., #template)
                 marker = title
             elif title:
