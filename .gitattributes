@@ -1,0 +1,21 @@
+# LF everywhere, whatever the editor or OS. A CRLF shell script or entrypoint fails on
+# Linux (`env: 'bash\r': No such file or directory`).
+* text=auto eol=lf
+
+# Binary files: never normalized, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.sqlite binary
+*.db binary

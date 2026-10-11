@@ -1,0 +1,25 @@
+# Backstop for the Claude Code commit-gate. Even non-Claude commits go through this.
+# Install: `uv tool install pre-commit && pre-commit install --hook-type pre-commit --hook-type pre-push --hook-type commit-msg`
+#
+# It delegates to the canonical detection gate, so it auto-covers every stack
+# present (web, api, cli, …) with no per-stack config to maintain here.
+# The commit-msg hook strips AI attribution (Co-Authored-By: Claude, "Generated
+# with Claude Code") from every commit message, whatever Claude's settings say.
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: commit-gate
+        name: commit gate (all detected stacks)
+        entry: bash .claude/hooks/precommit-gate.sh --local
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: strip-ai-attribution
+        name: strip AI attribution from commit message
+        entry: bash .claude/hooks/strip-ai-attribution.sh
+        language: system
+        stages: [commit-msg]
+        always_run: true

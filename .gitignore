@@ -70,9 +70,6 @@ coverage/
 tmp/
 *.tmp
 
-# Git worktrees
-.worktrees/
-
 # Bot state files
 .reminder_cache.json
 
@@ -84,7 +81,11 @@ output/
 input/
 
 # Claude settings
-.claude/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/cache/
+.claude/data/
+.claude/worktrees/
 
 # ----------------------------
 # Credentials and databases
@@ -104,3 +105,11 @@ credentials*.json
 
 # Default export folder
 notes_export/
+
+# Tooling caches and local env
+.serena/
+.pyrefly/
+.pytest_cache/
+.ruff_cache/
+.env.local
+.env.*.local

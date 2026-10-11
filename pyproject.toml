@@ -25,6 +25,8 @@ packages = ["src/noted"]
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+# Canonical project-init hooks stay verbatim so template diffs stay clean.
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
@@ -32,9 +34,15 @@ select = ["E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-n auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests",
+]
 
 [tool.pyrefly]
-project_includes = ["src"]
+project_includes = ["src", "tests"]
+search_path = ["src"]
 
 [tool.deptry]
 # The package imports itself as `noted` under the src/ layout.
@@ -42,5 +50,8 @@ known_first_party = ["noted"]
 
 [dependency-groups]
 dev = [
+    "pyrefly>=1.3.2",
     "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.17.0",
 ]
