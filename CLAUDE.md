@@ -2,130 +2,39 @@
 
 ## PROJECT CONTEXT
 
-A Python CLI tool for working directly the Apple Note sqlite database. The project aims
-to be able to:
+A Python CLI (`noted`) that works directly with the Apple Notes SQLite database: list,
+view, search (FTS5), stats, and export (Markdown, JSON, HTML, PDF, with attachments).
+Development operates on a cached copy of the database; write operations are not
+implemented yet. See [USAGE.md](USAGE.md) for commands and `uv run noted --help`.
 
-- Make a copy of the Apple Note sqlite database and '-wal' an '-shm' files before opening and manipulating the database during development.
-  - Write operations will be accessible in production.
-- Read, write, create, delete notes.
-- List notes
-- Database statistics
-- Search notes
-- Export notes to markdown, JSON, HTML or PDF formats
+Stack, locked versions, gotchas and daily commands: [docs/tech-stack.md](docs/tech-stack.md).
 
 ## Apple Database Structure
 
-Key tables include:
+Key tables:
 
-- ZICCLOUDSYNCINGOBJECT: Main table containing notes, folders, attachments
-- ZICNOTEDATA: The actual note content (compressed)
+- ZICCLOUDSYNCINGOBJECT: notes, folders, attachments
+- ZICNOTEDATA: note content; ZDATA is gzip-compressed protobuf (rich text, embedded
+  objects, checklists), parsed with betterproto2 (see `src/noted/protobuf.py`)
 
-### Note Content Format
-
-The note body is stored in a compressed, protobuf format:
-
-- Located in ZICNOTEDATA.ZDATA
-- Gzip-compressed protobuf data
-- Contains rich text formatting, embedded images, checklists, etc.
-
-Protobuf libraries to consider:
-
-pyrobuf:
-
-- An alternative that generates Cython code for significantly improved performance (2-4x faster than the official C++-backed library, and 20-40x faster than pure-Python).
-- Best for: Performance-critical applications where maximum serialization/deserialization speed is essential.
-
-betterproto:
-
-- This library aims to provide a more idiomatic Python experience by leveraging modern language features like dataclasses, type checking (mypy), and async/await for gRPC.
-- Best for: Developers prioritizing clean, readable, and modern Python code with strong static type checking.
-
-## QUICK START
-
-```bash
-# Install dependencies
-uv sync
-
-# List notes
-uv run noted list
-uv run noted list --folder "Work" --limit 10
-
-# Search titles/folders
-uv run noted list --search "meeting"
-
-# Deep search (FTS5 full-text search in content)
-uv run noted list -s "budget" --deep
-uv run noted list -s 'title:meeting AND content:deadline' --deep
-
-# View a note
-uv run noted view 42
-uv run noted view 42 --markdown
-
-# Export all notes with attachments
-uv run noted export --all
-
-# Refresh cache
-uv run noted refresh
-```
-
-**See [USAGE.md](USAGE.md) for comprehensive documentation** including FTS5 query syntax, export options, and more.
-
-## ENVIRONMENT VARIABLES
-
-None required at this time.
-
-## PACKAGE STRUCTURE
-
-```shell
-noted/
-├── pyproject.toml          # Project config, dependencies, CLI entry point
-├── uv.lock                  # Locked dependencies
-├── src/noted/
-│   ├── __init__.py         # Package version
-│   ├── attachments.py      # Attachment export, archive creation
-│   ├── cli.py              # Typer CLI commands (list, stats, view, export, refresh, index)
-│   ├── db.py               # Database caching, connection, queries
-│   ├── display.py          # Rich terminal output formatting
-│   ├── export.py           # Full export functionality, master index
-│   ├── models.py           # Note, NoteSummary, Attachment, SearchResult dataclasses
-│   ├── protobuf.py         # Protobuf parsing for note content
-│   ├── search.py           # FTS5 full-text search index and queries
-│   └── tables.py           # Apple Notes CRDT table parsing
-├── tests/
-│   ├── test_attachments.py # Attachment export tests
-│   ├── test_cli.py         # CLI command tests
-│   ├── test_db.py          # Database function tests
-│   ├── test_display.py     # Display function tests
-│   ├── test_export.py      # Full export tests
-│   ├── test_integration.py # Integration tests
-│   ├── test_models.py      # Model tests
-│   ├── test_protobuf.py    # Protobuf parsing tests
-│   ├── test_search.py      # FTS5 search tests
-│   └── test_tables.py      # Table parsing tests
-└── docs/
-    ├── apple-notes-storage-reference.md     # Canonical storage reference (REA-verified schema, enums, paths, reader recipe)
-    ├── apple-notes-database-fields.md       # Column-level deep-dive: note flags, smart folders, hashtags, sharing, SQL
-    ├── apple-notes-attachment-structure.md  # Attachment/media columns, exportable UTIs, export conventions
-    ├── apple-notes-crdt-table-structure.md  # Table CRDT protobuf layout and decoding steps
-    ├── apple-notes-formatting-structure.md  # Attribute run fields, lists, checklists, rendering notes
-    ├── apple-notes-timestamp-structure.md   # Date columns per entity, epoch conversion
-    └── plans/              # Design and implementation plans
-```
+Column-level detail lives in `docs/apple-notes-*.md` (start with
+`apple-notes-storage-reference.md`).
 
 ## CRITICAL RULES
 
-- The Apple Notes data location is located: ~/Library/Group Containers/group.com.apple.notes
+- The Apple Notes data location is: ~/Library/Group Containers/group.com.apple.notes
   - The SQLite database is: NoteStore.sqlite
   - The SHM file is: NoteStore.sqlite-shm
   - The WAL file is: NoteStore.sqlite-wal
-- Make copies of the sqlite files and never operate on the live versions
+- Make copies of the sqlite files and never operate on the live versions. The code caches
+  the copy in `~/.cache/noted` (`CACHE_DIR` in `src/noted/db.py`):
 
 ```python
 shutil.copy("NoteStore.sqlite", "/tmp/notes_copy.sqlite")
 ```
 
 - Use read only mode in development:
-  
+
 ```python
 # URI mode with read-only flag
 conn = sqlite3.connect("file:path/to/db.sqlite?mode=ro", uri=True)
@@ -137,31 +46,19 @@ examples, code comments, etc.
 
 Note: Apple uses Core Data timestamps (seconds since Jan 1, 2001), so you add 978307200 to convert to Unix epoch.
 
-## TECH STACK
-
-- Python 3.14+
-- uv - Package management (NOT pip)
-- Ruff - Formatting and linting
-- Pyrefly - Type checking
-- Pytest - Testing
-- Typer - CLI framework, command line options
-- rich - Terminal output
-- loguru - Logging (Colorized=True)
-
 ## CODE CONVENTIONS
 
-- Keep source code file to ~1000 lines or less. This does not apply to output files like HTML/CSS.
-  - Write modular, resuable and clean code.
-- PEP-8 naming for all identifiers
-- Type hints required everywhere, including tests
-- Docstrings required for all modules, functions, classes, methods
+Tooling (ruff, pyrefly, pytest) and its settings live in `pyproject.toml`; see
+[docs/tech-stack.md](docs/tech-stack.md).
+
+- Keep source files to ~1000 lines or less (not enforced: `db.py` and `display.py` currently exceed it and are candidates for splitting). Does not apply to output files like HTML/CSS.
+- Write modular, reusable and clean code; prefer simple code over clever complexity
+- PEP-8 naming; type hints everywhere, including tests; docstrings (Google style) on all modules, functions, classes and methods
 - No star imports (`from foo import *`)
-- Prefer async calls for services
-- ISO 8601 dates (YYYY-MM-DD)
-- UUID7 for unique IDs (Python 3.14+)
-- pathlib.Path for all file paths (not os.path)
-- Prefer clean, simple code over clever complexity
-- Use XDG-style directories and file locations as required
+- `pathlib.Path` for file paths (not `os.path`; none used today)
+- ISO 8601 dates in output (YYYY-MM-DD; display uses `YYYY-MM-DD HH:MM`)
+- Async services and UUID7 ids are aspirations only: no async code or uuid generation exists yet
+- Cache lives at `~/.cache/noted` (hardcoded, not XDG-aware); `noted export` defaults to `./notes_export`, not `input/` or `output/`
 - **Cryptography** - FIPS-approved and post-quantum ready only; `pqc-check.py` enforces it at commit. Before writing crypto code, check the library's current docs via Ref.
   - Key establishment: **ML-KEM-768/1024** (FIPS 203), or a hybrid such as **X25519MLKEM768** in TLS 1.3. Never RSA, ECDH, X25519 or DH alone.
   - Signatures: **ML-DSA-65/87** (FIPS 204) or **SLH-DSA** (FIPS 205); LMS/XMSS (SP 800-208) for firmware signing. Never new RSA, ECDSA or Ed25519 keys. A classical algorithm is allowed only as one half of a hybrid with the PQC one.
@@ -170,32 +67,6 @@ Note: Apple uses Core Data timestamps (seconds since Jan 1, 2001), so you add 97
   - Implementations: a FIPS 140-3 validated module (OpenSSL 3.5+ FIPS provider, AWS-LC) through Python `cryptography` >= 48 (ML-KEM/ML-DSA) or Node `crypto` >= 24.7 (ML-KEM, ML-DSA, SLH-DSA). Never crypto-js, node-forge, pycryptodome, liboqs or pre-standard Kyber/Dilithium.
   - Can't migrate yet (an IdP's RS256 tokens, a partner protocol): add a `.pqc-policy` entry with the reason and an `until=` date, and track the migration in `docs/agent/todo.md`. Python's `hashlib.*(usedforsecurity=False)` marks a non-security digest.
 - **Line endings are LF** - `.gitattributes` (`* text=auto eol=lf`) enforces it. Never write CRLF, and never keep a file CRLF because it "was CRLF already"; a CRLF shell script breaks on Linux.
-
-## INPUT/OUTPUT
-
-- Default input location: `input/` (searched recursively)
-- Default output location: `output/` (created if missing)
-- Command line options can override defaults
-
-## TESTING
-
-- Framework: pytest with `tests/` directory
-- Run: `uv run pytest`
-
-## FUTURE ROADMAP
-
-TBD
-
-## WORKFLOW INSTRUCTIONS
-
-- Always read relevant files before making changes
-- Update or create documentation in `docs/`
-- Use sub-agents for specialized tasks
-- Ensure type checking and linting pass before committing
-- Create meaningful commit messages
-- Use Claude Tasks for tracking work (not beads)
-- No commits until there are zero Pyrefly and ruff warnings or errors
-- Git commits use conventional commit format like docs:, feat():, fix()
 
 ## Working Memory
 
