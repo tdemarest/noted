@@ -6,6 +6,7 @@ import re
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table as RichTable
@@ -49,16 +50,16 @@ def display_notes_table(notes: list[Note], search: str | None = None) -> None:
     """
     if not notes:
         if search:
-            console.print(f"[yellow]No notes matching '{search}'.[/yellow]")
+            console.print(f"[yellow]No notes matching '{escape(search)}'.[/yellow]")
         else:
             console.print("[yellow]No notes found.[/yellow]")
         return
 
-    title = f"Notes matching '{search}'" if search else "Notes"
+    title = Text(f"Notes matching '{search}'" if search else "Notes")
     table = RichTable(title=title, show_lines=False)
-    table.add_column("ID", style="dim", width=6)
-    table.add_column("Title", style="bold")
-    table.add_column("Folder", style="cyan")
+    table.add_column("ID", style="dim", width=6, overflow="fold")
+    table.add_column("Title", style="bold", overflow="fold")
+    table.add_column("Folder", style="cyan", overflow="fold")
     table.add_column("Created", style="green")
     table.add_column("Modified", style="green")
 
@@ -84,7 +85,7 @@ def display_notes_table(notes: list[Note], search: str | None = None) -> None:
 
     console.print(table)
     if search:
-        console.print(f"\n[dim]Found: {len(notes)} notes matching '{search}'[/dim]")
+        console.print(f"\n[dim]Found: {len(notes)} notes matching '{escape(search)}'[/dim]")
     else:
         console.print(f"\n[dim]Total: {len(notes)} notes[/dim]")
 
@@ -296,11 +297,11 @@ def display_notes_tree(
                     else:
                         icon = TREE_ICONS["folder"]
                     # This is the actual folder entry
-                    label = f"{icon} {part} [dim]({folder.note_count})[/dim]"
+                    label = Text.assemble(f"{icon} ", part, " ", (f"({folder.note_count})", "dim"))
                 else:
                     # Intermediate folder not in our list, show without count
                     icon = TREE_ICONS["folder"]
-                    label = f"{icon} {part}"
+                    label = Text(f"{icon} {part}")
 
                 new_node = current_node.add(label)
                 folder_nodes[current_path] = new_node
@@ -361,7 +362,7 @@ def display_notes_tree(
                     if att_icons:
                         label_parts.append(f" {att_icons}")
 
-                node.add("".join(label_parts))
+                node.add(Text("".join(label_parts)))
 
     console.print(root)
 
@@ -417,14 +418,14 @@ def display_search_results(results: list[SearchResult], query: str) -> None:
         query: The search query (for display in title).
     """
     if not results:
-        console.print(f"[yellow]No notes matching '{query}' in content.[/yellow]")
+        console.print(f"[yellow]No notes matching '{escape(query)}' in content.[/yellow]")
         return
 
-    table = RichTable(title=f"Deep search: '{query}'", show_lines=True)
-    table.add_column("ID", style="dim", width=6)
-    table.add_column("Title", style="bold", width=30)
-    table.add_column("Folder", style="cyan", width=20)
-    table.add_column("Match Context", width=50)
+    table = RichTable(title=Text(f"Deep search: '{query}'"), show_lines=True)
+    table.add_column("ID", style="dim", width=6, overflow="fold")
+    table.add_column("Title", style="bold", width=30, overflow="fold")
+    table.add_column("Folder", style="cyan", width=20, overflow="fold")
+    table.add_column("Match Context", width=50, overflow="fold")
 
     for result in results:
         note = result.note
@@ -434,13 +435,13 @@ def display_search_results(results: list[SearchResult], query: str) -> None:
 
         table.add_row(
             str(note.id),
-            note.title,
-            note.folder or "(No Folder)",
+            Text(note.title),
+            Text(note.folder or "(No Folder)"),
             snippet_text,
         )
 
     console.print(table)
-    console.print(f"\n[dim]Found: {len(results)} notes matching '{query}'[/dim]")
+    console.print(f"\n[dim]Found: {len(results)} notes matching '{escape(query)}'[/dim]")
 
 
 # Attachment type groupings for cleaner display
@@ -597,9 +598,7 @@ def display_stats(stats: DatabaseStats) -> None:
                 if group == "Images" and image_subtypes:
                     # Sort subtypes by count
                     sorted_subtypes = sorted(image_subtypes.items(), key=lambda x: -x[1])
-                    subtype_str = ", ".join(f"{name}: {c}" for name, c in sorted_subtypes[:4])
-                    if len(sorted_subtypes) > 4:
-                        subtype_str += ", ..."
+                    subtype_str = ", ".join(f"{name}: {c}" for name, c in sorted_subtypes)
                     console.print(f"  {label:<20} {count:>6,}  [dim]({subtype_str})[/dim]")
                 else:
                     console.print(f"  {label:<20} {count:>6,}")
@@ -615,11 +614,11 @@ def display_stats(stats: DatabaseStats) -> None:
         folder_count = len(stats.folder_counts)
         console.print(f"\n[bold]Folders[/bold] ({folder_count} total)")
         table = RichTable(show_header=True, header_style="bold", box=box.SIMPLE)
-        table.add_column("Folder")
+        table.add_column("Folder", overflow="fold")
         table.add_column("Notes", justify="right")
 
         for folder, count in stats.folder_counts.items():
-            table.add_row(folder, str(count))
+            table.add_row(Text(folder), str(count))
 
         console.print(table)
 
@@ -667,7 +666,7 @@ def display_error(message: str) -> None:
     Args:
         message: Error message to display.
     """
-    console.print(f"[bold red]Error:[/bold red] {message}")
+    console.print(f"[bold red]Error:[/bold red] {escape(message)}")
 
 
 def display_success(message: str) -> None:
@@ -676,7 +675,7 @@ def display_success(message: str) -> None:
     Args:
         message: Success message to display.
     """
-    console.print(f"[bold green]Success:[/bold green] {message}")
+    console.print(f"[bold green]Success:[/bold green] {escape(message)}")
 
 
 def display_warning(message: str) -> None:
@@ -685,7 +684,21 @@ def display_warning(message: str) -> None:
     Args:
         message: Warning message to display.
     """
-    console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
+    console.print(f"[bold yellow]Warning:[/bold yellow] {escape(message)}")
+
+
+def _export_line(marker: tuple[str, str], folder: str | None, title: str) -> Text:
+    """Build an export status line as Text so note data is never parsed as markup.
+
+    Args:
+        marker: (symbol, style) pair shown before the note path.
+        folder: Note folder name (or None for no folder).
+        title: Note title.
+
+    Returns:
+        Text like "  ✓ Folder/Title" with folder and title styled.
+    """
+    return Text.assemble("  ", marker, " ", (folder or "(No Folder)", "cyan"), "/", (title, "bold"))
 
 
 def display_export_success(folder: str | None, title: str, attachment_count: int = 0) -> None:
@@ -696,11 +709,10 @@ def display_export_success(folder: str | None, title: str, attachment_count: int
         title: Note title.
         attachment_count: Number of attachments exported.
     """
-    folder_display = folder or "(No Folder)"
-    att_info = f" [dim]({attachment_count} attachments)[/dim]" if attachment_count else ""
-    console.print(
-        f"  [bold green]✓[/bold green] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold]{att_info}"
-    )
+    line = _export_line(("✓", "bold green"), folder, title)
+    if attachment_count:
+        line.append(f" ({attachment_count} attachments)", style="dim")
+    console.print(line)
 
 
 def display_export_locked(folder: str | None, title: str) -> None:
@@ -710,11 +722,9 @@ def display_export_locked(folder: str | None, title: str) -> None:
         folder: Note folder name (or None for no folder).
         title: Note title.
     """
-    folder_display = folder or "(No Folder)"
-    console.print(
-        f"  [bold yellow]⚠[/bold yellow] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
-        f"[yellow](locked)[/yellow]"
-    )
+    line = _export_line(("⚠", "bold yellow"), folder, title)
+    line.append(" (locked)", style="yellow")
+    console.print(line)
 
 
 def display_export_failed(folder: str | None, title: str, error: str | None) -> None:
@@ -725,12 +735,9 @@ def display_export_failed(folder: str | None, title: str, error: str | None) -> 
         title: Note title.
         error: Error message describing the failure.
     """
-    folder_display = folder or "(No Folder)"
-    error_msg = error or "Unknown error"
-    console.print(
-        f"  [bold red]✗[/bold red] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
-        f"[red](failed: {error_msg})[/red]"
-    )
+    line = _export_line(("✗", "bold red"), folder, title)
+    line.append(f" (failed: {error or 'Unknown error'})", style="red")
+    console.print(line)
 
 
 def display_export_issues_summary(
@@ -747,21 +754,15 @@ def display_export_issues_summary(
         console.print()
         console.print("[bold yellow]Locked notes:[/bold yellow]")
         for folder, title in locked_notes:
-            folder_display = folder or "(No Folder)"
-            console.print(
-                f"  [yellow]⚠[/yellow] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold]"
-            )
+            console.print(_export_line(("⚠", "yellow"), folder, title))
 
     if failed_notes:
         console.print()
         console.print("[bold red]Failed notes:[/bold red]")
         for folder, title, error in failed_notes:
-            folder_display = folder or "(No Folder)"
-            error_msg = error or "Unknown error"
-            console.print(
-                f"  [red]✗[/red] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold] "
-                f"[dim]({error_msg})[/dim]"
-            )
+            line = _export_line(("✗", "red"), folder, title)
+            line.append(f" ({error or 'Unknown error'})", style="dim")
+            console.print(line)
 
 
 def _format_file_size(size_bytes: int | float) -> str:
@@ -809,12 +810,12 @@ def display_debug_note_info(
         padding=(0, 1),
     )
     table.add_column("Field", style="dim")
-    table.add_column("Value", style="bold")
+    table.add_column("Value", style="bold", overflow="fold")
 
     table.add_row("Row ID", str(note.id))
-    table.add_row("UUID", note.identifier)
-    table.add_row("Title", note.title)
-    table.add_row("Folder", note.folder or "(No Folder)")
+    table.add_row("UUID", Text(note.identifier))
+    table.add_row("Title", Text(note.title))
+    table.add_row("Folder", Text(note.folder or "(No Folder)"))
     if note.created:
         table.add_row("Created", note.created.strftime("%Y-%m-%d %H:%M:%S"))
     if note.modified:
@@ -847,7 +848,7 @@ def display_note_view(note: Note, content: NoteContent) -> None:
     # Create header panel
     panel = Panel(
         Text(subtitle, style="dim"),
-        title=f"[bold]{note.title}[/bold]",
+        title=Text(note.title, style="bold"),
         title_align="left",
         border_style="blue",
     )
@@ -909,17 +910,17 @@ def _render_formatted_content(
                     rich_table = table_to_rich(table_lookup[att.identifier])
                     console.print(rich_table)
                 elif att.type_uti == "com.apple.notes.table":
-                    console.print(_missing_table_marker(att), end="")
+                    console.print(Text(_missing_table_marker(att)), end="")
                 elif att.type_uti == DIVIDER_UTI:
                     console.rule()
                 elif att.url and att.type_uti in LINK_UTIS:
                     console.print(Text(att.title or att.url, style=f"link {att.url}"), end="")
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     # Inline text attachments display as plain text
-                    console.print(att.title, end="")
+                    console.print(Text(att.title), end="")
                 elif att.title:
                     # Show filename for non-table attachments
-                    console.print(f"[{att.title}]", end="")
+                    console.print(Text(f"[{att.title}]"), end="")
                 else:
                     console.print("[Attachment]", end="")
             else:
@@ -939,7 +940,15 @@ def _render_formatted_content(
                 else:
                     break
             i = j
-            console.print(Syntax(code_text.rstrip(), "python", theme="monokai", line_numbers=False))
+            console.print(
+                Syntax(
+                    code_text.rstrip(),
+                    "python",
+                    theme="monokai",
+                    line_numbers=False,
+                    word_wrap=True,
+                )
+            )
             continue
 
         # Handle block quotes - collect all consecutive quote runs
@@ -1032,17 +1041,17 @@ def _render_formatted_content(
 
         # Handle headings
         if para_type == ParagraphType.TITLE:
-            console.print(text, style="bold magenta", end="")
+            console.print(Text(text, style="bold magenta"), end="")
             i += 1
             continue
 
         if para_type == ParagraphType.HEADING:
-            console.print(text, style="bold cyan", end="")
+            console.print(Text(text, style="bold cyan"), end="")
             i += 1
             continue
 
         if para_type == ParagraphType.SUBHEADING:
-            console.print(text, style="bold blue", end="")
+            console.print(Text(text, style="bold blue"), end="")
             i += 1
             continue
 
@@ -1108,7 +1117,7 @@ def _render_text_with_tables(text: str, table_lookup: dict[str, Table]) -> None:
         # Print text before this marker
         before = text[last_end : match.start()]
         if before:
-            console.print(before, end="")
+            console.print(Text(before), end="")
 
         # Render the table
         identifier = match.group(1)
@@ -1126,7 +1135,7 @@ def _render_text_with_tables(text: str, table_lookup: dict[str, Table]) -> None:
     # Print remaining text
     remaining = text[last_end:]
     if remaining:
-        console.print(remaining)
+        console.print(Text(remaining))
 
 
 def table_to_rich(table: Table) -> RichTable:
@@ -1142,11 +1151,11 @@ def table_to_rich(table: Table) -> RichTable:
 
     # Add columns
     for _ in range(table.columns):
-        rich_table.add_column()
+        rich_table.add_column(overflow="fold")
 
     # Add rows
     for row in range(table.rows):
-        row_data = [table.get_cell(row, col) for col in range(table.columns)]
+        row_data = [Text(table.get_cell(row, col)) for col in range(table.columns)]
         rich_table.add_row(*row_data)
 
     return rich_table
@@ -1644,10 +1653,6 @@ def get_note_html(note: Note, content: NoteContent) -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(note.title)}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
-          rel="stylesheet">
     <style>
         :root {{
             --noted-purple: #5014D7;
@@ -1667,7 +1672,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
         }}
 
         body {{
-            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Helvetica Neue',
+                Helvetica, 'Segoe UI', Arial, sans-serif;
             font-size: 16px;
             line-height: 1.6;
             color: var(--noted-black);
@@ -1779,7 +1785,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
             padding: 1rem;
             border-radius: 4px;
             overflow-x: auto;
-            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas,
+                'Courier New', monospace;
             font-size: 0.9rem;
         }}
 
@@ -1787,7 +1794,8 @@ def get_note_html(note: Note, content: NoteContent) -> str:
             background: var(--noted-mist);
             padding: 0.2em 0.4em;
             border-radius: 3px;
-            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas,
+                'Courier New', monospace;
             font-size: 0.9em;
         }}
 

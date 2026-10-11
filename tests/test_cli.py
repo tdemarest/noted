@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from noted.cli import app
@@ -631,3 +632,57 @@ def test_list_unrelated_file_not_found_not_reported_as_db_missing(
     assert result.exit_code == 1
     assert "database not found" not in result.output
     assert "unrelated-missing-file.txt" in result.output
+
+
+def test_export_json_conflicts_with_html(tmp_path: Path) -> None:
+    """Test export rejects --json with --html instead of silently preferring JSON."""
+    with (
+        patch("noted.cli.db.get_connection") as mock_conn,
+        patch("noted.cli.display.get_note_json") as mock_json,
+        patch("noted.cli.display.get_note_html") as mock_html,
+    ):
+        result = runner.invoke(app, ["export", "42", "--json", "--html", "-o", str(tmp_path / "o")])
+
+    assert result.exit_code == 1
+    assert "only one format" in result.output.lower()
+    mock_conn.assert_not_called()
+    mock_json.assert_not_called()
+    mock_html.assert_not_called()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_view_json_conflicts_with_html() -> None:
+    """Test view rejects --json with --html instead of silently preferring JSON."""
+    with patch("noted.cli.db.get_connection") as mock_conn:
+        result = runner.invoke(app, ["view", "42", "--json", "--html"])
+
+    assert result.exit_code == 1
+    assert "only one format" in result.output.lower()
+    mock_conn.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("args", "target", "exc", "code"),
+    [
+        (["list"], "noted.cli.db.list_notes", typer.Exit(code=3), 3),
+        (["stats"], "noted.cli.db.get_database_stats", typer.Exit(code=3), 3),
+        (["index", "--rebuild"], "noted.cli.search.build_index", typer.Exit(code=3), 3),
+        (["list"], "noted.cli.db.list_notes", typer.Abort(), 1),
+        (["view", "42"], "noted.cli.db.get_note", typer.Abort(), 1),
+        (["export", "42"], "noted.cli.db.get_note", typer.Abort(), 1),
+    ],
+)
+def test_intentional_exit_passes_through_without_error_log(
+    args: list[str], target: str, exc: Exception, code: int
+) -> None:
+    """Test typer.Exit/Abort raised inside a command keep their code and are not logged."""
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch(target, side_effect=exc),
+        patch("noted.cli.logger") as mock_logger,
+    ):
+        result = runner.invoke(app, args)
+
+    assert result.exit_code == code
+    mock_logger.exception.assert_not_called()
+    assert "Error:" not in result.output

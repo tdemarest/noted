@@ -10,6 +10,7 @@ from rich.console import Console
 
 from noted import attachments, db, display, protobuf, search
 from noted import export as export_module
+from noted import pdf as pdf_module
 
 # Debug mode state (set by callback)
 _debug_mode = False
@@ -42,6 +43,26 @@ def _debug_callback(debug: bool) -> None:
             format="<level>{level}</level>: {message}",
             colorize=True,
         )
+
+
+# Exceptions that end a command on purpose; they must pass through the generic
+# ``except Exception`` handlers (both subclass RuntimeError) without being logged as errors.
+_INTENTIONAL_EXITS = (typer.Exit, typer.Abort)
+
+
+def _require_single_format(selected: dict[str, bool]) -> None:
+    """Exit with an error when more than one output format flag is set.
+
+    Args:
+        selected: Mapping of format flag label (e.g. "--json") to whether it was given.
+
+    Raises:
+        typer.Exit: With code 1 if more than one format was selected.
+    """
+    chosen = [flag for flag, on in selected.items() if on]
+    if len(chosen) > 1:
+        display.display_error(f"Choose only one format: {', '.join(chosen)} cannot be combined.")
+        raise typer.Exit(code=1)
 
 
 app = typer.Typer(
@@ -158,6 +179,8 @@ def list_cmd(
     except db.DatabaseNotFoundError as e:
         display.display_error(str(e))
         raise typer.Exit(code=1) from None
+    except _INTENTIONAL_EXITS:
+        raise
     except Exception as e:
         logger.exception("Error listing notes")
         display.display_error(str(e))
@@ -214,6 +237,8 @@ def stats(
     except db.DatabaseNotFoundError as e:
         display.display_error(str(e))
         raise typer.Exit(code=1) from None
+    except _INTENTIONAL_EXITS:
+        raise
     except Exception as e:
         logger.exception("Error getting database stats")
         display.display_error(str(e))
@@ -277,6 +302,8 @@ def index(
     except db.DatabaseNotFoundError as e:
         display.display_error(str(e))
         raise typer.Exit(code=1) from None
+    except _INTENTIONAL_EXITS:
+        raise
     except Exception as e:
         logger.exception("Error managing FTS index")
         display.display_error(str(e))
@@ -328,6 +355,21 @@ def view(
     if pdf and not export:
         display.display_error("--pdf requires --export to write to a file.")
         raise typer.Exit(code=1)
+    _require_single_format(
+        {
+            "--markdown": markdown,
+            "--json/--json-styled": json_output or json_styled,
+            "--html": html,
+            "--pdf": pdf,
+        }
+    )
+    if pdf:
+        # Fail before any work is done if WeasyPrint's native libraries are missing.
+        try:
+            pdf_module.load_weasyprint()
+        except pdf_module.PdfUnavailableError as e:
+            display.display_error(str(e))
+            raise typer.Exit(code=1) from None
     try:
         conn = db.get_connection()
 
@@ -429,12 +471,7 @@ def view(
                     html_content = display.link_attachments_html(
                         html_content, exported_atts, attachments_dir
                     )
-                from weasyprint import HTML
-
-                pdf_result = HTML(string=html_content).write_pdf()
-                if pdf_result is None:
-                    raise RuntimeError("PDF generation failed")
-                output_bytes = pdf_result
+                output_bytes = pdf_module.render_pdf(html_content)
             elif json_output or json_styled:
                 output = display.get_note_json(note, content, include_styling=json_styled)
             elif html:
@@ -474,7 +511,7 @@ def view(
     except db.DatabaseNotFoundError as e:
         display.display_error(str(e))
         raise typer.Exit(code=1) from None
-    except typer.Exit:
+    except _INTENTIONAL_EXITS:
         raise
     except Exception as e:
         logger.exception("Error viewing note")
@@ -569,13 +606,14 @@ def export(
         )
         raise typer.Exit(code=1)
 
-    # Validate: --markdown cannot be combined with another output format
-    if fmt_markdown and (fmt_json or fmt_json_styled or fmt_html):
-        display.display_error(
-            "Choose only one format: --markdown cannot be combined with "
-            "--json, --json-styled or --html."
-        )
-        raise typer.Exit(code=1)
+    # Validate: one output format only (--json-styled is a JSON variant, so it may join --json)
+    _require_single_format(
+        {
+            "--markdown": fmt_markdown,
+            "--json/--json-styled": fmt_json or fmt_json_styled,
+            "--html": fmt_html,
+        }
+    )
 
     try:
         conn = db.get_connection()
@@ -710,7 +748,7 @@ def export(
     except db.DatabaseNotFoundError as e:
         display.display_error(str(e))
         raise typer.Exit(code=1) from None
-    except typer.Exit:
+    except _INTENTIONAL_EXITS:
         raise
     except Exception as e:
         logger.exception("Error exporting notes")
