@@ -1,15 +1,14 @@
 """Protobuf parsing for Apple Notes content.
 
 Apple Notes stores note content as gzip-compressed (occasionally zlib) protobuf data.
-This module defines the betterproto schema and parsing functions.
+This module defines the betterproto2 schema and parsing functions.
 """
 
 import zlib
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 from typing import Any
 
-import betterproto
+import betterproto2
 
 from noted.models import (
     Attachment,
@@ -184,7 +183,7 @@ def is_note_locked(data: bytes | None) -> bool:
 
 
 @dataclass
-class AttachmentInfo(betterproto.Message):
+class AttachmentInfo(betterproto2.Message):
     """Protobuf AttachmentInfo message for embedded attachments.
 
     Field numbers match Apple's schema:
@@ -192,12 +191,12 @@ class AttachmentInfo(betterproto.Message):
     - Field 2: type_uti (string, e.g., 'public.jpeg')
     """
 
-    attachment_identifier: str = betterproto.string_field(1)
-    type_uti: str = betterproto.string_field(2)
+    attachment_identifier: str = betterproto2.field(1, betterproto2.TYPE_STRING)
+    type_uti: str = betterproto2.field(2, betterproto2.TYPE_STRING)
 
 
 @dataclass
-class AttributeRun(betterproto.Message):
+class AttributeRun(betterproto2.Message):
     """Protobuf AttributeRun message for text formatting and attachments.
 
     Field numbers match Apple's schema:
@@ -205,12 +204,12 @@ class AttributeRun(betterproto.Message):
     - Field 12: attachment_info (AttachmentInfo) - attachment details if present
     """
 
-    length: int = betterproto.int32_field(1)
-    attachment_info: AttachmentInfo | None = betterproto.message_field(12)
+    length: int = betterproto2.field(1, betterproto2.TYPE_INT32)
+    attachment_info: AttachmentInfo | None = betterproto2.field(12, betterproto2.TYPE_MESSAGE)
 
 
 @dataclass
-class Note(betterproto.Message):
+class Note(betterproto2.Message):
     """Protobuf Note message containing the text content.
 
     Field numbers match Apple's schema:
@@ -218,15 +217,14 @@ class Note(betterproto.Message):
     - Field 5: attribute_run (repeated)
     """
 
-    note_text: str = betterproto.string_field(2)
-    attribute_run: list[AttributeRun] = dataclass_field(
-        default_factory=list,
-        metadata={"betterproto": betterproto.FieldMetadata(5, "message")},
+    note_text: str = betterproto2.field(2, betterproto2.TYPE_STRING)
+    attribute_run: list[AttributeRun] = betterproto2.field(
+        5, betterproto2.TYPE_MESSAGE, repeated=True
     )
 
 
 @dataclass
-class Document(betterproto.Message):
+class Document(betterproto2.Message):
     """Protobuf Document message wrapping a Note.
 
     Field numbers match Apple's schema:
@@ -234,18 +232,18 @@ class Document(betterproto.Message):
     - Field 3: note (Note message)
     """
 
-    note: Note = betterproto.message_field(3)
+    note: Note | None = betterproto2.field(3, betterproto2.TYPE_MESSAGE)
 
 
 @dataclass
-class NoteStoreProto(betterproto.Message):
+class NoteStoreProto(betterproto2.Message):
     """Root protobuf message for Apple Notes content.
 
     Field numbers match Apple's schema:
     - Field 2: document (Document message)
     """
 
-    document: Document = betterproto.message_field(2)
+    document: Document | None = betterproto2.field(2, betterproto2.TYPE_MESSAGE)
 
 
 def _decode_varint(data: bytes, pos: int) -> tuple[int, int]:
@@ -302,7 +300,7 @@ def _extract_formatting(
     """Extract formatting information from decompressed protobuf.
 
     Uses raw protobuf decoding to access all formatting fields that
-    aren't covered by the betterproto schema.
+    aren't covered by the betterproto2 schema.
 
     Args:
         decompressed: Decompressed protobuf bytes.

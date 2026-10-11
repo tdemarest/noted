@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any
 
-import betterproto
+import betterproto2
 from loguru import logger
 
 from noted.models import Table
@@ -43,103 +43,122 @@ ICTABLE_TYPE = "com.apple.notes.ICTable"
 
 
 def _repeated(number: int, proto_type: str) -> Any:
-    """Declare a repeated betterproto field.
+    """Declare a repeated betterproto2 field.
 
     Args:
         number: Protobuf field number.
-        proto_type: betterproto type name such as "message", "string" or "bytes".
+        proto_type: betterproto2 type name such as "message", "string" or "bytes".
 
     Returns:
         A dataclass field with an empty list default.
     """
+    return betterproto2.field(number, proto_type, repeated=True)
+
+
+def _message(number: int, message_type: type[betterproto2.Message]) -> Any:
+    """Declare a message field that defaults to an empty message instead of None.
+
+    betterproto2 defaults unset message fields to None, while the graph walk
+    below relies on unset references reading as empty messages (the behavior
+    of the original betterproto library).
+
+    Args:
+        number: Protobuf field number.
+        message_type: Message class used as the default factory.
+
+    Returns:
+        A dataclass field with an empty message default.
+    """
     return dataclass_field(
-        default_factory=list,
-        metadata={"betterproto": betterproto.FieldMetadata(number, proto_type)},
+        default_factory=message_type,
+        metadata={"betterproto": betterproto2.FieldMetadata(number, betterproto2.TYPE_MESSAGE)},
     )
 
 
 @dataclass
-class ObjectId(betterproto.Message):
+class ObjectId(betterproto2.Message):
     """Reference to a value: an integer, a string, or an entry index."""
 
-    unsigned_integer_value: int = betterproto.uint64_field(2)
-    string_value: str = betterproto.string_field(4)
-    object_index: int = betterproto.int32_field(6)
+    unsigned_integer_value: int = betterproto2.field(2, betterproto2.TYPE_UINT64)
+    string_value: str = betterproto2.field(4, betterproto2.TYPE_STRING)
+    object_index: int = betterproto2.field(6, betterproto2.TYPE_INT32)
 
 
 @dataclass
-class MapEntry(betterproto.Message):
+class MapEntry(betterproto2.Message):
     """One custom map entry: key is an index into the keys list."""
 
-    key: int = betterproto.int32_field(1)
-    value: ObjectId = betterproto.message_field(2)
+    key: int = betterproto2.field(1, betterproto2.TYPE_INT32)
+    value: ObjectId = _message(2, ObjectId)
 
 
 @dataclass
-class CustomMap(betterproto.Message):
+class CustomMap(betterproto2.Message):
     """Typed key/value object: type is an index into the types list."""
 
-    type: int = betterproto.int32_field(1)
+    type: int = betterproto2.field(1, betterproto2.TYPE_INT32)
     map_entry: list[MapEntry] = _repeated(3, "message")
 
 
 @dataclass
-class DictionaryElement(betterproto.Message):
+class DictionaryElement(betterproto2.Message):
     """One dictionary element mapping a key object to a value object."""
 
-    key: ObjectId = betterproto.message_field(1)
-    value: ObjectId = betterproto.message_field(2)
+    key: ObjectId = _message(1, ObjectId)
+    value: ObjectId = _message(2, ObjectId)
 
 
 @dataclass
-class Dictionary(betterproto.Message):
+class Dictionary(betterproto2.Message):
     """CRDT dictionary of object references."""
 
     element: list[DictionaryElement] = _repeated(1, "message")
 
 
 @dataclass
-class OrderedSetOrderingArrayAttachment(betterproto.Message):
+class OrderedSetOrderingArrayAttachment(betterproto2.Message):
     """One position in an ordering array, identified by a raw UUID slot."""
 
-    index: int = betterproto.int32_field(1)
-    uuid: bytes = betterproto.bytes_field(2)
+    index: int = betterproto2.field(1, betterproto2.TYPE_INT32)
+    uuid: bytes = betterproto2.field(2, betterproto2.TYPE_BYTES)
 
 
 @dataclass
-class OrderedSetOrderingArray(betterproto.Message):
+class OrderedSetOrderingArray(betterproto2.Message):
     """Display order of an ordered set as a list of slot UUIDs."""
 
     attachment: list[OrderedSetOrderingArrayAttachment] = _repeated(2, "message")
 
 
 @dataclass
-class OrderedSetOrdering(betterproto.Message):
+class OrderedSetOrdering(betterproto2.Message):
     """Ordering array plus the slot -> id contents mapping."""
 
-    array: OrderedSetOrderingArray = betterproto.message_field(1)
-    contents: Dictionary = betterproto.message_field(2)
+    array: OrderedSetOrderingArray = _message(1, OrderedSetOrderingArray)
+    contents: Dictionary = _message(2, Dictionary)
 
 
 @dataclass
-class OrderedSet(betterproto.Message):
+class OrderedSet(betterproto2.Message):
     """CRDT ordered set used for table rows and columns."""
 
-    ordering: OrderedSetOrdering = betterproto.message_field(1)
+    ordering: OrderedSetOrdering = _message(1, OrderedSetOrdering)
 
 
 @dataclass
-class MergeableDataObjectEntry(betterproto.Message):
+class MergeableDataObjectEntry(betterproto2.Message):
     """One object in the flat entry list; only the fields tables use."""
 
-    dictionary: Dictionary | None = betterproto.message_field(6, optional=True)
-    note: Note | None = betterproto.message_field(10, optional=True)
-    custom_map: CustomMap | None = betterproto.message_field(13, optional=True)
-    ordered_set: OrderedSet | None = betterproto.message_field(16, optional=True)
+    dictionary: Dictionary | None = betterproto2.field(6, betterproto2.TYPE_MESSAGE, optional=True)
+    note: Note | None = betterproto2.field(10, betterproto2.TYPE_MESSAGE, optional=True)
+    custom_map: CustomMap | None = betterproto2.field(13, betterproto2.TYPE_MESSAGE, optional=True)
+    ordered_set: OrderedSet | None = betterproto2.field(
+        16, betterproto2.TYPE_MESSAGE, optional=True
+    )
 
 
 @dataclass
-class MergeableDataObjectData(betterproto.Message):
+class MergeableDataObjectData(betterproto2.Message):
     """Flat object graph with shared key, type and UUID lists."""
 
     entries: list[MergeableDataObjectEntry] = _repeated(3, "message")
@@ -149,18 +168,18 @@ class MergeableDataObjectData(betterproto.Message):
 
 
 @dataclass
-class MergableDataObject(betterproto.Message):
+class MergableDataObject(betterproto2.Message):
     """Wrapper holding the object graph."""
 
-    version: int = betterproto.int32_field(2)
-    data: MergeableDataObjectData = betterproto.message_field(3)
+    version: int = betterproto2.field(2, betterproto2.TYPE_INT32)
+    data: MergeableDataObjectData = _message(3, MergeableDataObjectData)
 
 
 @dataclass
-class MergableDataProto(betterproto.Message):
+class MergableDataProto(betterproto2.Message):
     """Root message of ZMERGEABLEDATA1 after gunzip."""
 
-    mergable_data_object: MergableDataObject = betterproto.message_field(2)
+    mergable_data_object: MergableDataObject = _message(2, MergableDataObject)
 
 
 class _Graph:

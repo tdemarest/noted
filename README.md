@@ -102,7 +102,7 @@ exactly what I need it to and maybe it saves someone some hours or tokens if the
 - [![Python][python-badge]][python-url] Python 3.14+
 - [![Typer][typer-badge]][typer-url] Typer - CLI framework
 - [![Rich][rich-badge]][rich-url] Rich - Terminal formatting
-- [betterproto](https://github.com/danielgtaylor/python-betterproto) - Protobuf parsing
+- [betterproto2](https://github.com/betterproto/python-betterproto2) - Protobuf parsing
 - [py7zr](https://github.com/miurahr/py7zr) - 7zip archive creation
 - [loguru](https://github.com/Delgan/loguru) - Logging
 

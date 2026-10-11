@@ -2,8 +2,9 @@
 
 import gzip
 import zlib
+from dataclasses import dataclass
 
-import betterproto
+import betterproto2
 
 from noted.display import get_note_html, note_to_markdown
 from noted.models import Note
@@ -14,7 +15,7 @@ def test_notestoreproto_structure() -> None:
     """Test that NoteStoreProto has expected structure."""
     proto = NoteStoreProto()
     assert hasattr(proto, "document")
-    assert isinstance(proto, betterproto.Message)
+    assert isinstance(proto, betterproto2.Message)
 
 
 def test_parse_note_data_simple() -> None:
@@ -292,3 +293,49 @@ def test_note_link_and_url_card_render_as_links() -> None:
     )
     assert '<a href="applenotes:note/NOTE-UUID">Other [note]</a>' in page
     assert 'href="javascript:' not in page
+
+
+class _Alignment(betterproto2.Enum):
+    """Synthetic enum with fewer members than the wire data uses."""
+
+    LEFT = 0
+    CENTER = 1
+
+
+@dataclass
+class _Styled(betterproto2.Message):
+    """Synthetic message with an enum field, standing in for Apple's styles."""
+
+    alignment: _Alignment = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: _Alignment(0)
+    )
+
+
+def test_unknown_fields_and_enum_values_are_tolerated() -> None:
+    """Unknown field numbers, wire types and enum values parse without error.
+
+    Apple adds fields and enum values our schema does not declare, so every
+    level of the note payload carries extras: varint, length-delimited,
+    fixed32 and fixed64 fields with unknown numbers, plus an out-of-range
+    paragraph style type (an enum on Apple's side).
+    """
+    fixed32 = _varint((50 << 3) | 5) + (7).to_bytes(4, "little")
+    fixed64 = _varint((51 << 3) | 1) + (7).to_bytes(8, "little")
+    unknown = _field_varint(90, 999) + _field_bytes(91, b"\x08\x01") + fixed32 + fixed64
+    style = _field_varint(1, 999) + unknown
+    run = _run(5, paragraph_style=style, extra=unknown)
+    note = _field_bytes(2, b"Hello") + _field_bytes(5, run) + unknown
+    document = _field_varint(2, 1) + _field_bytes(3, note) + unknown
+    payload = _field_varint(1, 999) + _field_bytes(2, document) + unknown
+
+    proto = NoteStoreProto.parse(payload)
+    assert proto.document is not None and proto.document.note is not None
+    assert proto.document.note.note_text == "Hello"
+    assert [r.length for r in proto.document.note.attribute_run] == [5]
+
+    content = parse_note_data(gzip.compress(payload), include_formatting=True)
+    assert content.text == "Hello"
+    assert content.formatted_runs is not None
+
+    styled = _Styled.parse(_field_varint(1, 42) + unknown)
+    assert int(styled.alignment) == 42
