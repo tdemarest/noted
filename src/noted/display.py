@@ -182,6 +182,13 @@ _UTI_TYPE_NAMES: dict[str, str] = {
 }
 
 
+def _missing_table_marker(att: Attachment) -> str:
+    """Marker for a table whose content could not be loaded."""
+    if att.unavailable_reason:
+        return f"[Table unavailable: {att.unavailable_reason}]"
+    return "[Table]"
+
+
 def _attachment_type_name(uti: str) -> str:
     """Get human-readable type name for a UTI.
 
@@ -907,7 +914,7 @@ def _render_formatted_content(
                     rich_table = table_to_rich(table_lookup[att.identifier])
                     console.print(rich_table)
                 elif att.type_uti == "com.apple.notes.table":
-                    console.print("[Table]", end="")
+                    console.print(_missing_table_marker(att), end="")
                 elif att.type_uti == DIVIDER_UTI:
                     console.rule()
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
@@ -1265,7 +1272,7 @@ def note_to_markdown(
                     if att.identifier in table_lookup:
                         lines.append(table_to_markdown(table_lookup[att.identifier]))
                     else:
-                        lines.append("[Table]")
+                        lines.append(_missing_table_marker(att))
                 elif att.type_uti == DIVIDER_UTI:
                     lines.append("---")
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
@@ -2101,6 +2108,10 @@ def _note_to_html(
                 if att.type_uti == "com.apple.notes.table":
                     if att.identifier in table_lookup:
                         lines.append(_table_to_html(table_lookup[att.identifier]))
+                    else:
+                        lines.append(
+                            f"            <p>{html.escape(_missing_table_marker(att))}</p>"
+                        )
                 elif att.type_uti == DIVIDER_UTI:
                     lines.append("            <hr>")
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:

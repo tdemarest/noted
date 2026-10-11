@@ -308,7 +308,7 @@ def export_attachments(
                     filename=None,
                     type_uti=att.type_uti,
                     exported=False,
-                    skip_reason="No binary data in database",
+                    skip_reason=db.attachment_unavailable_reason(conn, att.identifier),
                 )
             )
             continue

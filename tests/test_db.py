@@ -9,6 +9,7 @@ from noted.db import (
     _cache_is_fresh,
     _source_db_path,
     apple_timestamp_to_datetime,
+    attachment_unavailable_reason,
     clear_cache,
     count_notes,
     deleted_note_sql,
@@ -17,7 +18,9 @@ from noted.db import (
     get_note_by_id,
     get_note_content,
     get_table_data,
+    load_note_tables,
 )
+from noted.models import Attachment
 
 
 def test_apple_timestamp_to_datetime() -> None:
@@ -649,3 +652,39 @@ def test_get_attachment_data_marked_up_pdf(tmp_path: Path) -> None:
     conn.close()
 
     assert result == (b"%PDF-1.7 test", "com.apple.paper.doc.pdf", "Marked-up PDF.pdf")
+
+
+def test_attachment_unavailable_reason(tmp_path: Path) -> None:
+    """Reasons distinguish missing records, unfetched rows and missing files."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZMERGEABLEDATA1 BLOB,
+            ZSUMMARY TEXT,
+            ZNEEDSINITIALFETCHFROMCLOUD INTEGER DEFAULT 0
+        )
+    """)
+    conn.executemany(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTYPEUTI,"
+        " ZNEEDSINITIALFETCHFROMCLOUD) VALUES (?, ?, ?, ?)",
+        [(1, "UNFETCHED", None, 1), (2, "PDF", "com.adobe.pdf", 0)],
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    assert attachment_unavailable_reason(conn, "GONE") == "record missing"
+    assert attachment_unavailable_reason(conn, "UNFETCHED") == "not downloaded from iCloud"
+    assert attachment_unavailable_reason(conn, "PDF") == "file missing on disk"
+
+    dangling = Attachment(identifier="GONE", type_uti="com.apple.notes.table")
+    load_note_tables(conn, [dangling])
+    assert dangling.table is None
+    assert dangling.unavailable_reason == "record missing"
+    conn.close()

@@ -116,12 +116,15 @@ class Attachment:
         type_uti: Uniform Type Identifier (e.g., 'public.jpeg').
         title: Display name/filename of the attachment, if known.
         table: Parsed table data, if this is a table attachment.
+        unavailable_reason: Why the attachment's content could not be loaded
+            (e.g. record missing, not downloaded), if known.
     """
 
     identifier: str
     type_uti: str
     title: str | None = None
     table: Table | None = None
+    unavailable_reason: str | None = None
 
 
 class ParagraphType:

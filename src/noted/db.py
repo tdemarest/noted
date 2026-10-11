@@ -11,7 +11,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from noted.models import DatabaseStats, Note, NoteSummary
+from noted.models import Attachment, DatabaseStats, Note, NoteSummary
+from noted.tables import parse_table_data
 
 
 @dataclass
@@ -36,6 +37,7 @@ class FolderInfo:
 # Apple Notes database location
 NOTES_DIR = Path.home() / "Library/Group Containers/group.com.apple.notes"
 MARKED_UP_PDF_UTI = "com.apple.paper.doc.pdf"
+TABLE_UTI = "com.apple.notes.table"
 
 # Cache location for copied database
 CACHE_DIR = Path.home() / ".cache/noted"
@@ -1084,6 +1086,53 @@ def get_table_data(conn: sqlite3.Connection, identifier: str) -> tuple[bytes, st
     if row is None:
         return None
     return (row["ZMERGEABLEDATA1"], row["ZSUMMARY"] or "")
+
+
+def attachment_unavailable_reason(conn: sqlite3.Connection, identifier: str) -> str:
+    """Explain why an attachment's content cannot be loaded.
+
+    Args:
+        conn: Database connection.
+        identifier: The attachment identifier from the note body.
+
+    Returns:
+        Short reason: "record missing" when the note references an attachment
+        that has no row (e.g. tables dropped by an Evernote import), "not
+        downloaded from iCloud" for unfetched placeholders, or "file missing
+        on disk" otherwise.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")}
+    fetch_col = "ZNEEDSINITIALFETCHFROMCLOUD" if "ZNEEDSINITIALFETCHFROMCLOUD" in columns else "0"
+    row = conn.execute(
+        f"SELECT ZTYPEUTI, {fetch_col} AS needs_fetch FROM ZICCLOUDSYNCINGOBJECT"
+        " WHERE ZIDENTIFIER = ?",
+        (identifier,),
+    ).fetchone()
+    if row is None:
+        return "record missing"
+    if row[0] is None or row[1] == 1 or row[0] == TABLE_UTI:
+        # A table row without ZMERGEABLEDATA1 has not been synced yet.
+        return "not downloaded from iCloud"
+    return "file missing on disk"
+
+
+def load_note_tables(conn: sqlite3.Connection, attachments: list[Attachment] | None) -> None:
+    """Parse table attachments in place, recording why a table is unavailable.
+
+    Args:
+        conn: Database connection.
+        attachments: Attachments from parsed note content (modified in place).
+    """
+    for attachment in attachments or []:
+        if attachment.type_uti != TABLE_UTI:
+            continue
+        result = get_table_data(conn, attachment.identifier)
+        if result:
+            attachment.table = parse_table_data(*result)
+        if attachment.table is None:
+            attachment.unavailable_reason = attachment_unavailable_reason(
+                conn, attachment.identifier
+            )
 
 
 def _find_media_file(media_identifier: str, filename: str) -> Path | None:

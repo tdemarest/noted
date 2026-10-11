@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from noted import attachments, db, display, protobuf, tables
+from noted import attachments, db, display, protobuf
 from noted.models import Note
 
 
@@ -287,13 +287,7 @@ def export_single_note(
         content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
 
         # Parse table attachments
-        if content.attachments:
-            for attachment in content.attachments:
-                if attachment.type_uti == "com.apple.notes.table":
-                    result = db.get_table_data(conn, attachment.identifier)
-                    if result:
-                        table_data, summary = result
-                        attachment.table = tables.parse_table_data(table_data, summary)
+        db.load_note_tables(conn, content.attachments)
 
         # Generate markdown
         markdown_content = display.get_note_markdown(note, content)

@@ -8,7 +8,7 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from noted import attachments, db, display, protobuf, search, tables
+from noted import attachments, db, display, protobuf, search
 from noted import export as export_module
 
 # Debug mode state (set by callback)
@@ -368,13 +368,7 @@ def view(
         )
 
         # Parse table attachments
-        if content.attachments:
-            for attachment in content.attachments:
-                if attachment.type_uti == "com.apple.notes.table":
-                    result = db.get_table_data(conn, attachment.identifier)
-                    if result:
-                        table_data, summary = result
-                        attachment.table = tables.parse_table_data(table_data, summary)
+        db.load_note_tables(conn, content.attachments)
 
         # Determine file extension based on format
         if pdf:
@@ -646,13 +640,7 @@ def export(
             attachment_names = db.get_attachment_names(conn, note.id)
             content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
 
-            if content.attachments:
-                for attachment in content.attachments:
-                    if attachment.type_uti == "com.apple.notes.table":
-                        table_result = db.get_table_data(conn, attachment.identifier)
-                        if table_result:
-                            table_data, summary = table_result
-                            attachment.table = tables.parse_table_data(table_data, summary)
+            db.load_note_tables(conn, content.attachments)
 
             # Determine output format and generate content
             if fmt_json or fmt_json_styled:
