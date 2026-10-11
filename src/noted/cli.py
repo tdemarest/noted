@@ -68,8 +68,8 @@ def main(
     _debug_callback(debug)
 
 
-@app.command()
-def list(
+@app.command("list")
+def list_cmd(
     folder: str | None = typer.Option(
         None,
         "--folder",
@@ -417,8 +417,7 @@ def view(
                     from collections import Counter
 
                     type_counts = Counter(
-                        protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown")
-                        for a in att_result.skipped
+                        protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in att_result.skipped
                     )
                     summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
                     display.display_warning(
@@ -447,9 +446,7 @@ def view(
             elif html:
                 output = display.get_note_html(note, content)
                 if exported_atts:
-                    output = display.link_attachments_html(
-                        output, exported_atts, attachments_dir
-                    )
+                    output = display.link_attachments_html(output, exported_atts, attachments_dir)
             elif markdown:
                 output = display.get_note_markdown(note, content)
                 if exported_atts:
@@ -610,13 +607,9 @@ def export(
 
             # Show detailed list of locked and failed notes
             if result.locked_count > 0 or result.failed_count > 0:
-                locked_notes = [
-                    (n.folder, n.title) for n in result.notes if n.status == "locked"
-                ]
+                locked_notes = [(n.folder, n.title) for n in result.notes if n.status == "locked"]
                 failed_notes = [
-                    (n.folder, n.title, n.error)
-                    for n in result.notes
-                    if n.status == "failed"
+                    (n.folder, n.title, n.error) for n in result.notes if n.status == "failed"
                 ]
                 display.display_export_issues_summary(locked_notes, failed_notes)
 

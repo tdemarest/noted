@@ -420,9 +420,7 @@ def export_all_notes(
                 exported_count += 1
                 total_attachments += result.attachment_count
                 if options.verbose:
-                    display.display_export_success(
-                        note.folder, note.title, result.attachment_count
-                    )
+                    display.display_export_success(note.folder, note.title, result.attachment_count)
             elif result.status == "locked":
                 locked_count += 1
                 if options.verbose:

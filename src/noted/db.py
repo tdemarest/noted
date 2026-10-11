@@ -714,7 +714,6 @@ def _count_smart_folder_notes(
         return 0
 
     try:
-
         query = json.loads(query_json)
 
         # Extract conditions from the query structure
@@ -803,7 +802,7 @@ def _count_smart_folder_notes(
         sql = f"""
             SELECT COUNT(DISTINCT n.Z_PK)
             FROM ZICCLOUDSYNCINGOBJECT n
-            WHERE {' AND '.join(sql_conditions)}
+            WHERE {" AND ".join(sql_conditions)}
         """
 
         cursor = conn.execute(sql, params)

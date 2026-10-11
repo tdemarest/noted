@@ -526,7 +526,7 @@ def display_stats(stats: DatabaseStats) -> None:
 
                 built_dt = datetime.fromisoformat(stats.fts_index_built_at)
                 built_str = built_dt.strftime("%Y-%m-%d %H:%M:%S")
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 built_str = stats.fts_index_built_at
             console.print(f"  {'Index built:':<20} {built_str}")
     elif stats.fts_indexed_notes == 0:
@@ -570,7 +570,14 @@ def display_stats(stats: DatabaseStats) -> None:
 
         # Display groups in a consistent order
         display_order = [
-            "PDFs", "Images", "Tables", "Links", "Office", "Emails", "Videos", "Drawings"
+            "PDFs",
+            "Images",
+            "Tables",
+            "Links",
+            "Office",
+            "Emails",
+            "Videos",
+            "Drawings",
         ]
         for group in display_order:
             if group in grouped:
@@ -682,8 +689,7 @@ def display_export_success(folder: str | None, title: str, attachment_count: int
     folder_display = folder or "(No Folder)"
     att_info = f" [dim]({attachment_count} attachments)[/dim]" if attachment_count else ""
     console.print(
-        f"  [bold green]✓[/bold green] [cyan]{folder_display}[/cyan]/"
-        f"[bold]{title}[/bold]{att_info}"
+        f"  [bold green]✓[/bold green] [cyan]{folder_display}[/cyan]/[bold]{title}[/bold]{att_info}"
     )
 
 
@@ -895,10 +901,14 @@ def _render_formatted_content(
                     console.print(rich_table)
                 elif att.type_uti == "com.apple.notes.table":
                     console.print("[Table]", end="")
-                elif att.type_uti in (
-                    "com.apple.notes.inlinetextattachment.hashtag",
-                    "com.apple.notes.inlinetextattachment.mention",
-                ) and att.title:
+                elif (
+                    att.type_uti
+                    in (
+                        "com.apple.notes.inlinetextattachment.hashtag",
+                        "com.apple.notes.inlinetextattachment.mention",
+                    )
+                    and att.title
+                ):
                     # Inline text attachments display as plain text
                     console.print(att.title, end="")
                 elif att.title:
@@ -1257,10 +1267,14 @@ def note_to_markdown(
                         lines.append(table_to_markdown(table_lookup[att.identifier]))
                     else:
                         lines.append("[Table]")
-                elif att.type_uti in (
-                    "com.apple.notes.inlinetextattachment.hashtag",
-                    "com.apple.notes.inlinetextattachment.mention",
-                ) and att.title:
+                elif (
+                    att.type_uti
+                    in (
+                        "com.apple.notes.inlinetextattachment.hashtag",
+                        "com.apple.notes.inlinetextattachment.mention",
+                    )
+                    and att.title
+                ):
                     # Inline text attachments display as plain text
                     lines.append(att.title)
                 else:

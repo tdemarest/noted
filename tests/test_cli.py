@@ -192,6 +192,7 @@ def test_stats_json_output() -> None:
         assert result.exit_code == 0
         # Should be valid JSON
         import json
+
         data = json.loads(result.output)
         assert data["notes"]["total"] == 42
         assert data["notes"]["pinned"] == 5

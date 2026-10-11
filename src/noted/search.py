@@ -85,7 +85,7 @@ def _index_is_fresh() -> bool:
 
         stored_mtime = float(row["value"])
         return stored_mtime >= cached_mtime
-    except (FileNotFoundError, sqlite3.OperationalError):
+    except FileNotFoundError, sqlite3.OperationalError:
         return False
 
 
