@@ -493,6 +493,7 @@ def test_get_connection(tmp_path: Path) -> None:
 
     with patch("noted.db.ensure_cached_db", return_value=test_db):
         from noted.db import get_connection
+
         conn = get_connection()
         assert conn is not None
         # Verify it's read-only by trying to write
@@ -844,8 +845,10 @@ def test_list_command() -> None:
         ),
     ]
 
-    with patch("noted.cli.db.get_connection") as mock_conn, \
-         patch("noted.cli.db.list_notes", return_value=mock_notes):
+    with (
+        patch("noted.cli.db.get_connection") as mock_conn,
+        patch("noted.cli.db.list_notes", return_value=mock_notes),
+    ):
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         assert "Test Note" in result.output
@@ -855,8 +858,10 @@ def test_count_command() -> None:
     """Test the count command."""
     mock_summary = NoteSummary(total_count=42, folder_counts={})
 
-    with patch("noted.cli.db.get_connection"), \
-         patch("noted.cli.db.get_summary", return_value=mock_summary):
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_summary", return_value=mock_summary),
+    ):
         result = runner.invoke(app, ["count"])
         assert result.exit_code == 0
         assert "42" in result.output
@@ -869,8 +874,10 @@ def test_count_by_folder() -> None:
         folder_counts={"Personal": 20, "Work": 22},
     )
 
-    with patch("noted.cli.db.get_connection"), \
-         patch("noted.cli.db.get_summary", return_value=mock_summary):
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_summary", return_value=mock_summary),
+    ):
         result = runner.invoke(app, ["count", "--by-folder"])
         assert result.exit_code == 0
         assert "Personal" in result.output

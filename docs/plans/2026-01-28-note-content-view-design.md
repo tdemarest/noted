@@ -42,9 +42,11 @@ betterproto dataclasses:
 class Note(betterproto.Message):
     note_text: str = betterproto.string_field(2)
 
+
 @dataclass
 class Document(betterproto.Message):
     note: Note = betterproto.message_field(3)
+
 
 @dataclass
 class NoteStoreProto(betterproto.Message):

@@ -812,9 +812,11 @@ def test_view_command_success() -> None:
     root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
     compressed = gzip.compress(root_proto)
 
-    with patch("noted.cli.db.get_connection") as mock_conn, \
-         patch("noted.cli.db.get_note_by_id", return_value=mock_note), \
-         patch("noted.cli.db.get_note_content", return_value=compressed):
+    with (
+        patch("noted.cli.db.get_connection") as mock_conn,
+        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=compressed),
+    ):
         result = runner.invoke(app, ["view", "42"])
 
     assert result.exit_code == 0
@@ -824,8 +826,10 @@ def test_view_command_success() -> None:
 
 def test_view_command_not_found() -> None:
     """Test view command with non-existent note."""
-    with patch("noted.cli.db.get_connection"), \
-         patch("noted.cli.db.get_note_by_id", return_value=None):
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=None),
+    ):
         result = runner.invoke(app, ["view", "999"])
 
     assert result.exit_code == 1
@@ -844,9 +848,11 @@ def test_view_command_locked() -> None:
     # Non-gzip data indicates locked
     locked_data = b"\x00\x01\x02\x03"
 
-    with patch("noted.cli.db.get_connection"), \
-         patch("noted.cli.db.get_note_by_id", return_value=mock_note), \
-         patch("noted.cli.db.get_note_content", return_value=locked_data):
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch("noted.cli.db.get_note_by_id", return_value=mock_note),
+        patch("noted.cli.db.get_note_content", return_value=locked_data),
+    ):
         result = runner.invoke(app, ["view", "42"])
 
     assert result.exit_code == 1
@@ -958,12 +964,14 @@ def test_view_command_integration() -> None:
     notes_db = Path.home() / "Library/Group Containers/group.com.apple.notes/NoteStore.sqlite"
     if not notes_db.exists():
         import pytest
+
         pytest.skip("Apple Notes database not available")
 
     # First list notes to get an ID
     list_result = runner.invoke(app, ["list", "--limit", "1"])
     if list_result.exit_code != 0 or "No notes found" in list_result.output:
         import pytest
+
         pytest.skip("No notes available to test")
 
     # Extract first note ID from output (ID column is first)
@@ -978,6 +986,7 @@ def test_view_command_integration() -> None:
 
     if note_id is None:
         import pytest
+
         pytest.skip("Could not parse note ID from list output")
 
     # View that note

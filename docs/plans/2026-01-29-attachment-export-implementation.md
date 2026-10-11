@@ -105,6 +105,7 @@ def test_get_attachment_data(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
+
     result = get_attachment_data(conn, "test-uuid-123")
     assert result is not None
     assert result[0] == test_data
@@ -133,6 +134,7 @@ def test_get_attachment_data_not_found(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
+
     result = get_attachment_data(conn, "nonexistent")
     assert result is None
     conn.close()
@@ -167,6 +169,7 @@ def test_get_attachment_data_no_binary(tmp_path: Path) -> None:
     conn.row_factory = sqlite3.Row
 
     from noted.db import get_attachment_data
+
     result = get_attachment_data(conn, "table-uuid")
     assert result is None
     conn.close()
@@ -857,20 +860,24 @@ def generate_manifest(
     # Combine exported and skipped, maintaining order
     all_attachments = []
     for att in exported:
-        all_attachments.append({
-            "identifier": att.identifier,
-            "filename": att.filename,
-            "type_uti": att.type_uti,
-            "exported": att.exported,
-        })
+        all_attachments.append(
+            {
+                "identifier": att.identifier,
+                "filename": att.filename,
+                "type_uti": att.type_uti,
+                "exported": att.exported,
+            }
+        )
     for att in skipped:
-        all_attachments.append({
-            "identifier": att.identifier,
-            "filename": att.filename,
-            "type_uti": att.type_uti,
-            "exported": att.exported,
-            "skip_reason": att.skip_reason,
-        })
+        all_attachments.append(
+            {
+                "identifier": att.identifier,
+                "filename": att.filename,
+                "type_uti": att.type_uti,
+                "exported": att.exported,
+                "skip_reason": att.skip_reason,
+            }
+        )
 
     manifest = {
         "note_id": note_id,
@@ -1113,25 +1120,29 @@ def export_attachments(
         # Check if this type is exportable
         skip_reason = get_skip_reason(att.type_uti)
         if skip_reason:
-            skipped.append(ExportedAttachment(
-                identifier=att.identifier,
-                filename=None,
-                type_uti=att.type_uti,
-                exported=False,
-                skip_reason=skip_reason,
-            ))
+            skipped.append(
+                ExportedAttachment(
+                    identifier=att.identifier,
+                    filename=None,
+                    type_uti=att.type_uti,
+                    exported=False,
+                    skip_reason=skip_reason,
+                )
+            )
             continue
 
         # Fetch binary data
         data = db.get_attachment_data(conn, att.identifier)
         if data is None:
-            skipped.append(ExportedAttachment(
-                identifier=att.identifier,
-                filename=None,
-                type_uti=att.type_uti,
-                exported=False,
-                skip_reason="No binary data in database",
-            ))
+            skipped.append(
+                ExportedAttachment(
+                    identifier=att.identifier,
+                    filename=None,
+                    type_uti=att.type_uti,
+                    exported=False,
+                    skip_reason="No binary data in database",
+                )
+            )
             continue
 
         binary_data, type_uti, db_title = data
@@ -1156,13 +1167,15 @@ def export_attachments(
         file_path = attachments_dir / filename
         file_path.write_bytes(binary_data)
 
-        exported.append(ExportedAttachment(
-            identifier=att.identifier,
-            filename=filename,
-            type_uti=att.type_uti,
-            exported=True,
-            skip_reason=None,
-        ))
+        exported.append(
+            ExportedAttachment(
+                identifier=att.identifier,
+                filename=filename,
+                type_uti=att.type_uti,
+                exported=True,
+                skip_reason=None,
+            )
+        )
 
     # Generate manifest
     manifest_path = attachments_dir / "manifest.json"
@@ -1625,12 +1638,14 @@ def view(
             if export_result.skipped:
                 # Summarize skipped by type
                 from collections import Counter
+
                 type_counts = Counter(
-                    protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown")
-                    for a in export_result.skipped
+                    protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in export_result.skipped
                 )
                 summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
-                display.display_warning(f"Skipped {len(export_result.skipped)} non-exportable: {summary}")
+                display.display_warning(
+                    f"Skipped {len(export_result.skipped)} non-exportable: {summary}"
+                )
 
         else:
             conn.close()

@@ -19,6 +19,7 @@ Parse and display Apple Notes embedded tables inline in `noted view` output. Tab
 @dataclass
 class TableCell:
     """A single cell in a table."""
+
     row: int
     column: int
     text: str
@@ -31,6 +32,7 @@ class Table:
     Stores data in a neutral format that can be rendered
     as Rich, markdown, ASCII, or HTML.
     """
+
     rows: int
     columns: int
     cells: dict[tuple[int, int], str]  # (row, col) -> text
@@ -101,11 +103,14 @@ The `Table` dataclass is format-agnostic. Separate renderer functions for each o
 def table_to_rich(table: Table) -> RichTable:
     """Render table as Rich Table for terminal."""
 
+
 def table_to_markdown(table: Table) -> str:
     """Render table as markdown string."""
 
+
 def table_to_ascii(table: Table) -> str:
     """Render table as ASCII grid."""
+
 
 def table_to_html(table: Table) -> str:
     """Render table as HTML <table> element."""

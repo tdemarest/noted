@@ -740,26 +740,30 @@ def generate_master_index(
     """
     notes_data = []
     for note_result in result.notes:
-        notes_data.append({
-            "id": note_result.note_id,
-            "identifier": note_result.identifier,
-            "title": note_result.title,
-            "folder": note_result.folder,
-            "path": str(note_result.path) if note_result.path else None,
-            "attachment_count": note_result.attachment_count,
-            "locked": note_result.status == "locked",
-            "export_status": note_result.status,
-        })
+        notes_data.append(
+            {
+                "id": note_result.note_id,
+                "identifier": note_result.identifier,
+                "title": note_result.title,
+                "folder": note_result.folder,
+                "path": str(note_result.path) if note_result.path else None,
+                "attachment_count": note_result.attachment_count,
+                "locked": note_result.status == "locked",
+                "export_status": note_result.status,
+            }
+        )
 
     errors_data = []
     for error in result.errors:
-        errors_data.append({
-            "note_id": error.note_id,
-            "identifier": error.identifier,
-            "title": error.title,
-            "folder": error.folder,
-            "error": error.error,
-        })
+        errors_data.append(
+            {
+                "note_id": error.note_id,
+                "identifier": error.identifier,
+                "title": error.title,
+                "folder": error.folder,
+                "error": error.error,
+            }
+        )
 
     index = {
         "export_version": "1.0",
@@ -844,6 +848,7 @@ def test_export_single_note(tmp_path: Path) -> None:
     """)
     # Insert minimal gzipped protobuf (just text "Hello")
     import gzip
+
     note_proto = b"\x12\x05Hello"
     doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
     root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
@@ -921,9 +926,7 @@ def export_single_note(
 
     # Create note folder with unique name
     note_folder_name = attachments.sanitize_filename(note.title)
-    note_folder_name = make_unique_folder_name(
-        note_folder_name, note.identifier, used_folder_names
-    )
+    note_folder_name = make_unique_folder_name(note_folder_name, note.identifier, used_folder_names)
     note_path = folder_path / note_folder_name
 
     # Get note content
@@ -963,9 +966,7 @@ def export_single_note(
     try:
         # Parse content
         attachment_names = db.get_attachment_names(conn, note.id)
-        content = protobuf.parse_note_data(
-            raw_data, attachment_names, include_formatting=True
-        )
+        content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
 
         # Parse table attachments
         if content.attachments:
@@ -1097,6 +1098,7 @@ def test_export_all_notes(tmp_path: Path) -> None:
 
     # Create notes with minimal content
     import gzip
+
     note_proto = b"\x12\x05Hello"
     doc_proto = b"\x1a" + bytes([len(note_proto)]) + note_proto
     root_proto = b"\x12" + bytes([len(doc_proto)]) + doc_proto
@@ -1212,7 +1214,11 @@ def export_all_notes(
                 exported_count += 1
                 total_attachments += result.attachment_count
                 if options.verbose:
-                    att_info = f" ({result.attachment_count} attachments)" if result.attachment_count else ""
+                    att_info = (
+                        f" ({result.attachment_count} attachments)"
+                        if result.attachment_count
+                        else ""
+                    )
                     print(f"  \u2713 {note.folder or '(No Folder)'}/{note.title}{att_info}")
             elif result.status == "locked":
                 locked_count += 1
@@ -1220,15 +1226,19 @@ def export_all_notes(
                     print(f"  \u26a0 {note.folder or '(No Folder)'}/{note.title} (locked)")
             else:
                 failed_count += 1
-                errors.append(ExportError(
-                    note_id=note.id,
-                    identifier=note.identifier,
-                    title=note.title,
-                    folder=note.folder,
-                    error=result.error or "Unknown error",
-                ))
+                errors.append(
+                    ExportError(
+                        note_id=note.id,
+                        identifier=note.identifier,
+                        title=note.title,
+                        folder=note.folder,
+                        error=result.error or "Unknown error",
+                    )
+                )
                 if options.verbose:
-                    print(f"  \u2717 {note.folder or '(No Folder)'}/{note.title} (failed: {result.error})")
+                    print(
+                        f"  \u2717 {note.folder or '(No Folder)'}/{note.title} (failed: {result.error})"
+                    )
 
             progress.update(task, advance=1)
 
@@ -1238,20 +1248,24 @@ def export_all_notes(
         folder_path = attachments.sanitize_filename(folder_name)
         count = sum(1 for r in note_results if r.folder == folder_name)
         if count > 0:
-            folder_info.append({
-                "name": folder_name,
-                "path": f"{folder_path}/",
-                "note_count": count,
-            })
+            folder_info.append(
+                {
+                    "name": folder_name,
+                    "path": f"{folder_path}/",
+                    "note_count": count,
+                }
+            )
 
     # Add (No Folder) if any notes have no folder
     no_folder_count = sum(1 for r in note_results if r.folder is None)
     if no_folder_count > 0:
-        folder_info.append({
-            "name": "(No Folder)",
-            "path": "(No_Folder)/",
-            "note_count": no_folder_count,
-        })
+        folder_info.append(
+            {
+                "name": "(No Folder)",
+                "path": "(No_Folder)/",
+                "note_count": no_folder_count,
+            }
+        )
 
     # Build result
     result = FullExportResult(
@@ -1450,9 +1464,13 @@ def export(
             conn.close()
 
             # Display summary
-            display.display_success(f"Exported {result.exported_count} notes to {result.output_dir}")
+            display.display_success(
+                f"Exported {result.exported_count} notes to {result.output_dir}"
+            )
             if result.locked_count > 0:
-                display.display_warning(f"{result.locked_count} locked notes (placeholders created)")
+                display.display_warning(
+                    f"{result.locked_count} locked notes (placeholders created)"
+                )
             if result.failed_count > 0:
                 display.display_error(f"{result.failed_count} notes failed (see index.json)")
             if result.total_attachments > 0:
@@ -1532,11 +1550,14 @@ def export(
                 display.display_success(f"Exported {len(export_result.exported)} attachments")
             if export_result.skipped:
                 from collections import Counter
+
                 type_counts = Counter(
                     protobuf.UTI_TYPE_MAP.get(a.type_uti, "Unknown") for a in export_result.skipped
                 )
                 summary = ", ".join(f"{v} {k}" for k, v in type_counts.items())
-                display.display_warning(f"Skipped {len(export_result.skipped)} non-exportable: {summary}")
+                display.display_warning(
+                    f"Skipped {len(export_result.skipped)} non-exportable: {summary}"
+                )
 
     except FileNotFoundError:
         display.display_error("Apple Notes database not found.")

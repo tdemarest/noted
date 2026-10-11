@@ -125,19 +125,23 @@ New module `src/noted/attachments.py`:
 @dataclass
 class ExportedAttachment:
     """Result of exporting a single attachment."""
+
     identifier: str
-    filename: str           # Final filename used (after deduplication)
+    filename: str  # Final filename used (after deduplication)
     type_uti: str
-    exported: bool          # True if binary data was written
-    skip_reason: str | None # Why it wasn't exported (e.g., "No binary data")
+    exported: bool  # True if binary data was written
+    skip_reason: str | None  # Why it wasn't exported (e.g., "No binary data")
+
 
 @dataclass
 class AttachmentExportResult:
     """Summary of attachment export operation."""
+
     exported: list[ExportedAttachment]
     skipped: list[ExportedAttachment]
     manifest_path: Path | None
     attachments_dir: Path | None
+
 
 def export_attachments(
     conn: sqlite3.Connection,

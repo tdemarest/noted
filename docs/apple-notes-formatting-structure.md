@@ -93,7 +93,7 @@ Use style field 4 for the indent depth of both list items and ordinary indented 
 ## Text styling in code
 
 ```python
-BOLD, ITALIC, BOLD_ITALIC = 1, 2, 3     # run field 5
+BOLD, ITALIC, BOLD_ITALIC = 1, 2, 3  # run field 5
 UNDERLINE = STRIKETHROUGH = HIGHLIGHT = 1  # run fields 6, 7, 14
 bold = weight in (1, 3)
 italic = weight in (2, 3)

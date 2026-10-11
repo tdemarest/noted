@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=UTC)
 
+
 def apple_timestamp_to_datetime(timestamp: float | None) -> datetime | None:
     """Convert a Core Data timestamp to a datetime."""
     if timestamp is None:

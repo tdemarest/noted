@@ -121,14 +121,14 @@ noted/
 - Make copies of the sqlite files and never operate on the live versions
 
 ```python
-shutil.copy('NoteStore.sqlite', '/tmp/notes_copy.sqlite')
+shutil.copy("NoteStore.sqlite", "/tmp/notes_copy.sqlite")
 ```
 
 - Use read only mode in development:
   
 ```python
 # URI mode with read-only flag
-conn = sqlite3.connect('file:path/to/db.sqlite?mode=ro', uri=True)
+conn = sqlite3.connect("file:path/to/db.sqlite?mode=ro", uri=True)
 ```
 
 - Never truncate data in report output - all text must be visible

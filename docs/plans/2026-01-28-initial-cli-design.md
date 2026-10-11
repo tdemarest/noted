@@ -53,11 +53,12 @@ DB_FILES = ["NoteStore.sqlite", "NoteStore.sqlite-shm", "NoteStore.sqlite-wal"]
 ```python
 @dataclass
 class Note:
-    id: int           # Z_PK from database
-    title: str        # ZTITLE1
+    id: int  # Z_PK from database
+    title: str  # ZTITLE1
     folder: str | None
     created: datetime
     modified: datetime
+
 
 @dataclass
 class NoteSummary:
