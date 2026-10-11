@@ -1,6 +1,7 @@
 """Tests for noted.protobuf."""
 
 import gzip
+import zlib
 
 import betterproto
 
@@ -210,3 +211,16 @@ def test_writing_direction_is_not_indent() -> None:
     assert result.formatted_runs is not None
     levels = [r.paragraph_style.indent_level for r in result.formatted_runs if r.paragraph_style]
     assert levels == [0, 1]
+
+
+def test_zlib_body_is_readable() -> None:
+    """A zlib-compressed body (older Notes versions) is not locked and parses."""
+    data = zlib.compress(_build_note("Hello", [_run(5)]))
+
+    assert is_note_locked(data) is False
+    assert parse_note_data(data).text == "Hello"
+
+
+def test_keyed_archive_body_is_locked() -> None:
+    """A locked note's body (NSKeyedArchiver plist) is reported as locked."""
+    assert is_note_locked(b"bplist00\x00\x01") is True

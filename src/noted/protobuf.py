@@ -1,10 +1,10 @@
 """Protobuf parsing for Apple Notes content.
 
-Apple Notes stores note content as gzip-compressed protobuf data.
+Apple Notes stores note content as gzip-compressed (occasionally zlib) protobuf data.
 This module defines the betterproto schema and parsing functions.
 """
 
-import gzip
+import zlib
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any
@@ -137,10 +137,33 @@ def _process_attachments(
     return "".join(result), attachments
 
 
+def _is_zlib_header(data: bytes) -> bool:
+    """Return True if data starts with a valid zlib (RFC 1950) header."""
+    return len(data) >= 2 and data[0] & 0x0F == 8 and ((data[0] << 8) | data[1]) % 31 == 0
+
+
+def decompress_note_data(data: bytes) -> bytes:
+    """Decompress a note body stored as gzip or zlib.
+
+    Args:
+        data: Raw bytes from ZICNOTEDATA.ZDATA.
+
+    Returns:
+        Decompressed protobuf bytes.
+
+    Raises:
+        zlib.error: If data is neither valid gzip nor zlib.
+    """
+    # wbits 47 = 32 + 15: auto-detect a gzip or zlib header.
+    return zlib.decompress(data, 47)
+
+
 def is_note_locked(data: bytes | None) -> bool:
     """Check if note data is encrypted (locked).
 
-    Locked notes don't have gzip-compressed data.
+    Readable bodies are gzip, or zlib for some notes written by older Notes
+    versions. Anything else (locked notes store an NSKeyedArchiver plist) is
+    treated as encrypted.
 
     Args:
         data: Raw bytes from ZICNOTEDATA.ZDATA.
@@ -150,7 +173,7 @@ def is_note_locked(data: bytes | None) -> bool:
     """
     if not data or len(data) < 2:
         return False
-    return data[:2] != GZIP_MAGIC
+    return not (data[:2] == GZIP_MAGIC or _is_zlib_header(data))
 
 
 @dataclass
@@ -380,7 +403,7 @@ def parse_note_data(
     attachment_names: dict[str, str] | None = None,
     include_formatting: bool = False,
 ) -> NoteContent:
-    """Parse gzip-compressed protobuf note data.
+    """Parse gzip- or zlib-compressed protobuf note data.
 
     Args:
         data: Gzip-compressed protobuf bytes from ZICNOTEDATA.ZDATA.
@@ -394,10 +417,10 @@ def parse_note_data(
         like [Image: photo.jpg] or [PDF].
 
     Raises:
-        gzip.BadGzipFile: If data is not valid gzip.
+        zlib.error: If data is neither valid gzip nor zlib.
         Exception: If protobuf parsing fails.
     """
-    decompressed = gzip.decompress(data)
+    decompressed = decompress_note_data(data)
     proto = NoteStoreProto().parse(decompressed)
 
     if not proto.document or not proto.document.note:
