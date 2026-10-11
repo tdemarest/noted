@@ -36,6 +36,9 @@ INLINE_TEXT_UTIS = (
     "com.apple.notes.inlinetextattachment.mention",
     "com.apple.notes.inlinetextattachment.link",
 )
+# Attachments rendered as a hyperlink to Attachment.url
+LINK_UTIS = ("com.apple.notes.inlinetextattachment.link", "public.url")
+SAFE_LINK_SCHEMES = ("http://", "https://", "mailto:", "applenotes:")
 
 
 def display_notes_table(notes: list[Note], search: str | None = None) -> None:
@@ -187,6 +190,19 @@ def _missing_table_marker(att: Attachment) -> str:
     if att.unavailable_reason:
         return f"[Table unavailable: {att.unavailable_reason}]"
     return "[Table]"
+
+
+def _markdown_link(label: str, url: str) -> str:
+    """Build a Markdown link, escaping brackets in the label."""
+    safe_label = label.replace("[", "\\[").replace("]", "\\]")
+    return f"[{safe_label}](<{url}>)"
+
+
+def _html_link(label: str, url: str) -> str:
+    """Build an HTML link, or plain escaped text if the URL scheme is unsafe."""
+    if not url.lower().startswith(SAFE_LINK_SCHEMES):
+        return html.escape(label)
+    return f'<a href="{html.escape(url, quote=True)}">{html.escape(label)}</a>'
 
 
 def _attachment_type_name(uti: str) -> str:
@@ -917,6 +933,8 @@ def _render_formatted_content(
                     console.print(_missing_table_marker(att), end="")
                 elif att.type_uti == DIVIDER_UTI:
                     console.rule()
+                elif att.url and att.type_uti in LINK_UTIS:
+                    console.print(Text(att.title or att.url, style=f"link {att.url}"), end="")
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     # Inline text attachments display as plain text
                     console.print(att.title, end="")
@@ -1275,6 +1293,8 @@ def note_to_markdown(
                         lines.append(_missing_table_marker(att))
                 elif att.type_uti == DIVIDER_UTI:
                     lines.append("---")
+                elif att.url and att.type_uti in LINK_UTIS:
+                    lines.append(_markdown_link(att.title or att.url, att.url))
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     # Inline text attachments display as plain text
                     lines.append(att.title)
@@ -2114,6 +2134,8 @@ def _note_to_html(
                         )
                 elif att.type_uti == DIVIDER_UTI:
                     lines.append("            <hr>")
+                elif att.url and att.type_uti in LINK_UTIS:
+                    lines.append(f"            <p>{_html_link(att.title or att.url, att.url)}</p>")
                 elif att.type_uti in INLINE_TEXT_UTIS and att.title:
                     lines.append(f"            <p>{html.escape(att.title)}</p>")
                 else:

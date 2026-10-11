@@ -5,7 +5,8 @@ import zlib
 
 import betterproto
 
-from noted.display import note_to_markdown
+from noted.display import get_note_html, note_to_markdown
+from noted.models import Note
 from noted.protobuf import NoteStoreProto, is_note_locked, parse_note_data
 
 
@@ -266,3 +267,28 @@ def test_note_link_and_divider_render() -> None:
     assert "Other note" in markdown
     assert "---" in markdown
     assert "[Attachment" not in markdown
+
+
+def test_note_link_and_url_card_render_as_links() -> None:
+    """Note links and URL cards with a URL render as links; unsafe schemes are not linked."""
+    link = _field_bytes(1, b"L-1") + _field_bytes(2, b"com.apple.notes.inlinetextattachment.link")
+    card = _field_bytes(1, b"U-1") + _field_bytes(2, b"public.url")
+    data = gzip.compress(
+        _build_note(
+            "￼\n￼",
+            [_run(1, extra=_field_bytes(12, link)), _run(1), _run(1, extra=_field_bytes(12, card))],
+        )
+    )
+    content = parse_note_data(data, {"L-1": "Other [note]"}, include_formatting=True)
+    assert content.attachments is not None
+    content.attachments[0].url = "applenotes:note/NOTE-UUID"
+    content.attachments[1].url = "javascript:alert(1)"
+
+    markdown = note_to_markdown(content, {})
+    assert "[Other \\[note\\]](<applenotes:note/NOTE-UUID>)" in markdown
+
+    page = get_note_html(
+        Note(id=1, identifier="N", title="T", folder=None, created=None, modified=None), content
+    )
+    assert '<a href="applenotes:note/NOTE-UUID">Other [note]</a>' in page
+    assert 'href="javascript:' not in page

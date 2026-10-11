@@ -368,7 +368,7 @@ def view(
         )
 
         # Parse table attachments
-        db.load_note_tables(conn, content.attachments)
+        db.load_attachment_content(conn, content.attachments)
 
         # Determine file extension based on format
         if pdf:
@@ -640,7 +640,7 @@ def export(
             attachment_names = db.get_attachment_names(conn, note.id)
             content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
 
-            db.load_note_tables(conn, content.attachments)
+            db.load_attachment_content(conn, content.attachments)
 
             # Determine output format and generate content
             if fmt_json or fmt_json_styled:

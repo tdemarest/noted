@@ -287,7 +287,7 @@ def export_single_note(
         content = protobuf.parse_note_data(raw_data, attachment_names, include_formatting=True)
 
         # Parse table attachments
-        db.load_note_tables(conn, content.attachments)
+        db.load_attachment_content(conn, content.attachments)
 
         # Generate markdown
         markdown_content = display.get_note_markdown(note, content)

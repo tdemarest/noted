@@ -1116,14 +1116,23 @@ def attachment_unavailable_reason(conn: sqlite3.Connection, identifier: str) -> 
     return "file missing on disk"
 
 
-def load_note_tables(conn: sqlite3.Connection, attachments: list[Attachment] | None) -> None:
-    """Parse table attachments in place, recording why a table is unavailable.
+def load_attachment_content(conn: sqlite3.Connection, attachments: list[Attachment] | None) -> None:
+    """Load database-held attachment content in place.
+
+    Parses table attachments (recording why a table is unavailable) and sets
+    the target URL of note links (ZTOKENCONTENTIDENTIFIER, an applenotes: URL)
+    and URL cards (ZURLSTRING).
 
     Args:
         conn: Database connection.
         attachments: Attachments from parsed note content (modified in place).
     """
-    for attachment in attachments or []:
+    if not attachments:
+        return
+
+    urls = _attachment_urls(conn, [a.identifier for a in attachments if a.identifier])
+    for attachment in attachments:
+        attachment.url = urls.get(attachment.identifier)
         if attachment.type_uti != TABLE_UTI:
             continue
         result = get_table_data(conn, attachment.identifier)
@@ -1133,6 +1142,22 @@ def load_note_tables(conn: sqlite3.Connection, attachments: list[Attachment] | N
             attachment.unavailable_reason = attachment_unavailable_reason(
                 conn, attachment.identifier
             )
+
+
+def _attachment_urls(conn: sqlite3.Connection, identifiers: list[str]) -> dict[str, str]:
+    """Map attachment identifiers to their stored URL, where one exists."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")}
+    url_columns = [c for c in ("ZTOKENCONTENTIDENTIFIER", "ZURLSTRING") if c in columns]
+    if not identifiers or not url_columns:
+        return {}
+    url_expr = url_columns[0] if len(url_columns) == 1 else f"COALESCE({', '.join(url_columns)})"
+    placeholders = ", ".join("?" for _ in identifiers)
+    cursor = conn.execute(
+        f"SELECT ZIDENTIFIER, {url_expr} FROM ZICCLOUDSYNCINGOBJECT"
+        f" WHERE ZIDENTIFIER IN ({placeholders})",
+        identifiers,
+    )
+    return {row[0]: row[1] for row in cursor if row[1]}
 
 
 def _find_media_file(media_identifier: str, filename: str) -> Path | None:

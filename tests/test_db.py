@@ -18,7 +18,7 @@ from noted.db import (
     get_note_by_id,
     get_note_content,
     get_table_data,
-    load_note_tables,
+    load_attachment_content,
 )
 from noted.models import Attachment
 
@@ -684,7 +684,39 @@ def test_attachment_unavailable_reason(tmp_path: Path) -> None:
     assert attachment_unavailable_reason(conn, "PDF") == "file missing on disk"
 
     dangling = Attachment(identifier="GONE", type_uti="com.apple.notes.table")
-    load_note_tables(conn, [dangling])
+    load_attachment_content(conn, [dangling])
     assert dangling.table is None
     assert dangling.unavailable_reason == "record missing"
     conn.close()
+
+
+def test_load_attachment_content_sets_urls(tmp_path: Path) -> None:
+    """Note link and URL card rows supply Attachment.url."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTOKENCONTENTIDENTIFIER TEXT,
+            ZURLSTRING TEXT
+        )
+    """)
+    conn.executemany(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTOKENCONTENTIDENTIFIER,"
+        " ZURLSTRING) VALUES (?, ?, ?, ?)",
+        [(1, "L-1", "applenotes:note/X", None), (2, "U-1", None, "https://example.com")],
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    atts = [
+        Attachment(identifier="L-1", type_uti="com.apple.notes.inlinetextattachment.link"),
+        Attachment(identifier="U-1", type_uti="public.url"),
+        Attachment(identifier="NONE", type_uti="com.adobe.pdf"),
+    ]
+    load_attachment_content(conn, atts)
+    conn.close()
+
+    assert [a.url for a in atts] == ["applenotes:note/X", "https://example.com", None]

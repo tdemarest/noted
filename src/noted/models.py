@@ -118,6 +118,7 @@ class Attachment:
         table: Parsed table data, if this is a table attachment.
         unavailable_reason: Why the attachment's content could not be loaded
             (e.g. record missing, not downloaded), if known.
+        url: Link target for note links (applenotes: URL) and URL cards.
     """
 
     identifier: str
@@ -125,6 +126,7 @@ class Attachment:
     title: str | None = None
     table: Table | None = None
     unavailable_reason: str | None = None
+    url: str | None = None
 
 
 class ParagraphType:
