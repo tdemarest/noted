@@ -63,6 +63,7 @@ UTI_EXTENSION_MAP: dict[str, str] = {
     "public.tiff": ".tiff",
     "com.compuserve.gif": ".gif",
     "com.adobe.pdf": ".pdf",
+    "com.apple.paper.doc.pdf": ".pdf",
     "public.pdf": ".pdf",
     "com.apple.drawing": ".png",
     "com.apple.drawing.2": ".png",

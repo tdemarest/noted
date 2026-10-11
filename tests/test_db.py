@@ -12,6 +12,7 @@ from noted.db import (
     clear_cache,
     count_notes,
     deleted_note_sql,
+    get_attachment_data,
     get_connection,
     get_note_by_id,
     get_note_content,
@@ -612,3 +613,39 @@ def test_recently_deleted_folder_counts_as_deleted(tmp_path: Path) -> None:
     )
     assert sorted(row[0] for row in deleted) == [4, 5]
     conn.close()
+
+
+def test_get_attachment_data_marked_up_pdf(tmp_path: Path) -> None:
+    """A marked-up PDF (no media row) is read from its FallbackPDFs copy."""
+    test_db = tmp_path / "NoteStore.sqlite"
+    conn = sqlite3.connect(test_db)
+    conn.execute("""
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+            Z_PK INTEGER PRIMARY KEY,
+            ZIDENTIFIER TEXT,
+            ZTYPEUTI TEXT,
+            ZTITLE TEXT,
+            ZMEDIA INTEGER,
+            ZFILENAME TEXT,
+            ZFALLBACKPDFGENERATION TEXT
+        )
+    """)
+    conn.execute(
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, ZIDENTIFIER, ZTYPEUTI, ZFALLBACKPDFGENERATION)"
+        " VALUES (1, 'ATT-1', 'com.apple.paper.doc.pdf', 'GEN-1')"
+    )
+    conn.commit()
+    conn.close()
+
+    notes_dir = tmp_path / "notes"
+    pdf_dir = notes_dir / "Accounts" / "ACCOUNT" / "FallbackPDFs" / "ATT-1" / "GEN-1"
+    pdf_dir.mkdir(parents=True)
+    (pdf_dir / "FallbackPDF.pdf").write_bytes(b"%PDF-1.7 test")
+
+    conn = sqlite3.connect(f"file:{test_db}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    with patch("noted.db.NOTES_DIR", notes_dir):
+        result = get_attachment_data(conn, "ATT-1")
+    conn.close()
+
+    assert result == (b"%PDF-1.7 test", "com.apple.paper.doc.pdf", "Marked-up PDF.pdf")

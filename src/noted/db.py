@@ -35,6 +35,7 @@ class FolderInfo:
 
 # Apple Notes database location
 NOTES_DIR = Path.home() / "Library/Group Containers/group.com.apple.notes"
+MARKED_UP_PDF_UTI = "com.apple.paper.doc.pdf"
 
 # Cache location for copied database
 CACHE_DIR = Path.home() / ".cache/noted"
@@ -1122,6 +1123,51 @@ def _find_media_file(media_identifier: str, filename: str) -> Path | None:
     return None
 
 
+def _find_fallback_pdf(attachment_identifier: str, generation: str | None) -> Path | None:
+    """Find the rendered fallback PDF of a marked-up PDF attachment.
+
+    Marked-up PDFs (com.apple.paper.doc.pdf) have no media row. Notes keeps
+    a flattened copy with the markup at:
+    NOTES_DIR/Accounts/<ACCOUNT_UUID>/FallbackPDFs/<ATTACHMENT_ID>/<generation>/FallbackPDF.pdf
+
+    Args:
+        attachment_identifier: The attachment's ZIDENTIFIER.
+        generation: ZFALLBACKPDFGENERATION, or None to search all generations.
+
+    Returns:
+        Path to the fallback PDF if found, None otherwise.
+    """
+    accounts_dir = NOTES_DIR / "Accounts"
+    if not accounts_dir.exists():
+        return None
+
+    for account_dir in accounts_dir.iterdir():
+        pdf_dir = account_dir / "FallbackPDFs" / attachment_identifier
+        if not pdf_dir.is_dir():
+            continue
+        if generation:
+            candidates = [pdf_dir / generation / "FallbackPDF.pdf"]
+        else:
+            candidates = sorted(pdf_dir.glob("*/FallbackPDF.pdf"))
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+
+    return None
+
+
+def _fallback_pdf_generation(conn: sqlite3.Connection, identifier: str) -> str | None:
+    """Return ZFALLBACKPDFGENERATION for an attachment, or None if unavailable."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(ZICCLOUDSYNCINGOBJECT)")}
+    if "ZFALLBACKPDFGENERATION" not in columns:
+        return None
+    row = conn.execute(
+        "SELECT ZFALLBACKPDFGENERATION FROM ZICCLOUDSYNCINGOBJECT WHERE ZIDENTIFIER = ?",
+        (identifier,),
+    ).fetchone()
+    return row[0] if row and row[0] else None
+
+
 def get_attachment_data(
     conn: sqlite3.Connection,
     identifier: str,
@@ -1161,12 +1207,14 @@ def get_attachment_data(
     media_id = row["media_id"]
     filename = row["ZFILENAME"]
 
-    # If no media record or filename, can't find file
-    if not media_id or not filename:
+    if type_uti == MARKED_UP_PDF_UTI and not media_id:
+        file_path = _find_fallback_pdf(identifier, _fallback_pdf_generation(conn, identifier))
+        filename = "Marked-up PDF.pdf"
+    elif not media_id or not filename:
+        # No media record or filename, can't find file
         return None
-
-    # Find the file on disk
-    file_path = _find_media_file(media_id, filename)
+    else:
+        file_path = _find_media_file(media_id, filename)
     if file_path is None:
         return None
 
