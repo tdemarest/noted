@@ -85,6 +85,8 @@ search_path = ["src"]
 [tool.deptry]
 # The package imports itself as `noted` under the src/ layout.
 known_first_party = ["noted"]
+# pdf.py loads weasyprint via importlib.import_module (a test seam), which deptry cannot see.
+per_rule_ignores = { DEP002 = ["weasyprint"] }
 
 [dependency-groups]
 dev = [
