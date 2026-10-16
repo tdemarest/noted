@@ -552,7 +552,10 @@ def export(
         None,
         "--folder",
         "-f",
-        help="Export only notes from this folder.",
+        help=(
+            "Export notes from every folder whose path contains this text "
+            "(case-insensitive, includes subfolders). Implies --all."
+        ),
     ),
     exclude_deleted: bool = typer.Option(
         False,
@@ -598,9 +601,14 @@ def export(
     For single note export, format options are available:
     --markdown (default), --json, --json-styled, --html
     """
-    # Validate: need either --all or note_ref
+    if folder_filter is not None and note_ref is not None:
+        display.display_error("Cannot use --folder with a specific note ID.")
+        raise typer.Exit(code=1)
+
+    all_notes = all_notes or folder_filter is not None
+
     if not all_notes and note_ref is None:
-        display.display_error("Specify either --all or a note ID/UUID to export.")
+        display.display_error("Specify --all, --folder, or a note ID/UUID to export.")
         raise typer.Exit(code=1)
 
     if all_notes and note_ref is not None:
@@ -641,6 +649,18 @@ def export(
 
             result = export_module.export_all_notes(conn, options)
             conn.close()
+
+            if folder_filter is not None:
+                if result.total_notes == 0:
+                    display.display_error(
+                        f"No notes in folders matching '{folder_filter}'. "
+                        "See folder paths with: noted list --tree"
+                    )
+                    raise typer.Exit(code=1)
+                matched = sorted({n.folder or "(No Folder)" for n in result.notes})
+                console.print(f"Folders matching '{folder_filter}':")
+                for folder_path in matched:
+                    console.print(f"  {folder_path}", markup=False, highlight=False)
 
             # Display summary
             display.display_success(

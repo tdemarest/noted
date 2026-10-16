@@ -374,6 +374,21 @@ def export_all_notes(
         include_deleted=options.include_deleted,
     )
 
+    # A folder filter that matches nothing should not leave an empty export behind
+    if not notes and options.folder_filter is not None:
+        return FullExportResult(
+            output_dir=options.output_dir,
+            archive_path=None,
+            total_notes=0,
+            exported_count=0,
+            locked_count=0,
+            failed_count=0,
+            total_attachments=0,
+            folders=[],
+            notes=[],
+            errors=[],
+        )
+
     # Get folder info
     folders_raw = db.get_folders(conn)
     folder_names = [f.name for f in folders_raw]

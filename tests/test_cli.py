@@ -10,6 +10,7 @@ import typer
 from typer.testing import CliRunner
 
 from noted.cli import app
+from noted.export import FullExportResult, NoteExportResult
 from noted.models import DatabaseStats, Note
 
 runner = CliRunner()
@@ -523,6 +524,98 @@ def test_export_all_not_with_note_id() -> None:
     result = runner.invoke(app, ["export", "42", "--all"])
     assert result.exit_code == 1
     assert "cannot" in result.output.lower()
+
+
+def _folder_export_result(output_dir: Path, folders: list[str]) -> FullExportResult:
+    """Build a full-export result with one successful note per folder path."""
+    notes = [
+        NoteExportResult(
+            note_id=i,
+            identifier=f"note-{i}",
+            title=f"Note {i}",
+            folder=folder,
+            status="success",
+            path=None,
+            attachment_count=0,
+            error=None,
+        )
+        for i, folder in enumerate(folders, start=1)
+    ]
+    return FullExportResult(
+        output_dir=output_dir,
+        archive_path=None,
+        total_notes=len(notes),
+        exported_count=len(notes),
+        locked_count=0,
+        failed_count=0,
+        total_attachments=0,
+        folders=sorted(set(folders)),
+        notes=notes,
+    )
+
+
+def test_export_folder_implies_all(tmp_path: Path) -> None:
+    """Test export --folder alone runs a full export filtered to that folder."""
+    out = tmp_path / "out"
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch(
+            "noted.cli.export_module.export_all_notes",
+            return_value=_folder_export_result(out, ["Work/Projects [2024]", "Work"]),
+        ) as mock_export_all,
+    ):
+        result = runner.invoke(app, ["export", "-f", "work", "-o", str(out)])
+
+    assert result.exit_code == 0, result.output
+    options = mock_export_all.call_args.args[1]
+    assert options.folder_filter == "work"
+    assert options.output_dir == out
+    assert "Folders matching 'work':" in result.output
+    assert "  Work\n" in result.output
+    assert "  Work/Projects [2024]\n" in result.output
+    assert "Exported 2 notes" in result.output
+
+
+def test_export_folder_no_match_fails(tmp_path: Path) -> None:
+    """Test export --folder exits 1 and points at the folder tree when nothing matches."""
+    out = tmp_path / "out"
+    with (
+        patch("noted.cli.db.get_connection"),
+        patch(
+            "noted.cli.export_module.export_all_notes",
+            return_value=_folder_export_result(out, []),
+        ),
+    ):
+        result = runner.invoke(app, ["export", "-f", "Nowhere", "-o", str(out)])
+
+    assert result.exit_code == 1
+    output = " ".join(result.output.split())
+    assert "No notes in folders matching 'Nowhere'" in output
+    assert "noted list --tree" in output
+
+
+def test_export_folder_not_with_note_id() -> None:
+    """Test export --folder cannot be combined with a note ID."""
+    with (
+        patch("noted.cli.db.get_connection") as mock_conn,
+        patch("noted.cli.export_module.export_all_notes") as mock_export_all,
+    ):
+        result = runner.invoke(app, ["export", "42", "-f", "Work"])
+
+    assert result.exit_code == 1
+    assert "cannot use --folder" in result.output.lower()
+    mock_conn.assert_not_called()
+    mock_export_all.assert_not_called()
+
+
+def test_export_folder_rejects_format_options() -> None:
+    """Test export --folder rejects single-note format options like --all does."""
+    with patch("noted.cli.db.get_connection") as mock_conn:
+        result = runner.invoke(app, ["export", "-f", "Work", "--html"])
+
+    assert result.exit_code == 1
+    assert "single note export" in result.output.lower()
+    mock_conn.assert_not_called()
 
 
 def _export_test_note() -> tuple[Note, bytes]:

@@ -15,6 +15,11 @@ history), and never let it grow past ~15 entries.
 
 <!-- entries below -->
 
+## 2026-10-15 - export --folder implies --all
+- Decided: `-f` alone implies `--all`; `-f` with a note ID is an error rather than silently ignored. The filter stays a case-insensitive substring of the full folder path (includes subfolders), so the CLI prints the matched folder paths to expose over-broad matches.
+- Decided: a folder filter that matches nothing returns early from `export_all_notes` before creating the output dir, and the CLI exits 1 pointing at `noted list --tree`.
+- Open: none.
+
 ## 2026-10-10 - export links, anchors and --toc
 - Decided: new `outline.py` (keeps display.py from growing); renderers record headings in a shared `Outline` as they emit them, so anchors and TOC never drift. JSON, text and terminal reuse the HTML walk (`collect_headings`). GitHub-style slugs so Markdown `#anchor` links work without emitted ids; note title reserved first. Markdown TOC title is bold text, not a heading, so it does not shift anchors. PDF page numbers via `target-counter` under `@media print` (browsers ignore it).
 - Decided: autolink only http(s) and mailto; never in code blocks or headings. Run links with unsafe schemes are now plain text in HTML and Markdown (was a live `javascript:` href).

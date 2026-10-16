@@ -459,3 +459,22 @@ def test_export_all_notes(tmp_path: Path) -> None:
     index_data = json.loads((output_dir / "index.json").read_text())
     assert index_data["statistics"]["total_notes"] == 2
     assert len(index_data["notes"]) == 2
+
+
+def test_export_all_notes_folder_no_match_writes_nothing(tmp_path: Path) -> None:
+    """Test a folder filter that matches no notes returns an empty result without writing."""
+    from unittest.mock import patch
+
+    from noted.export import ExportOptions, export_all_notes
+
+    output_dir = tmp_path / "notes_export"
+    options = ExportOptions(output_dir=output_dir, folder_filter="Nowhere")
+    conn = sqlite3.connect(":memory:")
+    with patch("noted.export.db.get_all_notes", return_value=[]) as mock_get_all:
+        result = export_all_notes(conn, options)
+    conn.close()
+
+    mock_get_all.assert_called_once()
+    assert result.total_notes == 0
+    assert result.notes == []
+    assert not output_dir.exists()

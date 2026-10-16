@@ -19,6 +19,7 @@ one line per item, link to `docs/plans/<plan>.md` for detail.
 
 Last ~10 items, newest first. Drop older ones; `git log` keeps the full history.
 
+- `noted export -f <folder>` works without `--all`; lists matched folders, errors on no match
 - Export links: bare-URL autolinks, heading anchors, `--toc` for every format, unsafe run-link fix
 - `noted view` list items keep run styles and checked-item strike style
 - Project refresh 2026-10-10 complete (docs/maintenance/2026-10-10-refresh.md)

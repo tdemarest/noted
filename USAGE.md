@@ -425,15 +425,31 @@ uv run noted export --all --zip
 # Custom output directory
 uv run noted export --all -o ~/Backups/notes_2024-01-15
 
-# Filter by folder
-uv run noted export --all --folder "Work"
-
 # Exclude deleted notes
 uv run noted export --all --exclude-deleted
 
 # Verbose output (show each note)
 uv run noted export --all --verbose
 ```
+
+### Folder Export
+
+`--folder` (`-f`) exports one folder and its subfolders. `--all` is implied, so it can
+be left out:
+
+```bash
+uv run noted export -f "Work"
+uv run noted export -f "Projects" --zip -o ~/Backups/projects
+```
+
+- The filter matches any part of the full folder path, ignoring case: `-f "work"`
+  matches `Work`, `Work/Projects` and also `Homework`. The command prints the
+  matching folders before the export summary so you can check.
+- Subfolders are included, and the folder structure is preserved in the output.
+- If no folder matches, the command exits with an error and writes nothing. Use
+  `noted list --tree` to see the folder paths.
+- `--folder` cannot be combined with a note ID, or with the single-note format
+  options (`--markdown`, `--json`, `--json-styled`, `--html`).
 
 ### Export Output Structure
 
